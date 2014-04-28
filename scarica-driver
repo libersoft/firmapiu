@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# restituisce l'architettura del pc
+get_architecture(){
+	if [ -z "$ARCH" ]
+	then # Se l'architettura e' stata definita
+		case "$( uname -m )" in
+			i?86)
+				ARCH=i386 ;;
+			x86_64)
+				ARCH=x86_64 ;;
+			*)
+				return 1 ;;
+		esac
+	fi
+
+	echo "$ARCH"
+	return 0
+}
+
+# restituisce il prefisso della libreria
+# $1 architettura del pc
+get_library_path(){
+	ARCH="$1"
+
+	if [ "$ARCH" = "i486" ]; then
+		LIBDIRSUFFIX=""
+	elif [ "$ARCH" = "i686" ]; then
+		LIBDIRSUFFIX=""
+	elif [ "$ARCH" = "x86_64" ]; then
+		LIBDIRSUFFIX="64"
+	else
+		LIBDIRSUFFIX=""
+	fi
+
+	LIBRARYPATH="/usr/local/lib${LIBDIRSUFFIX}/"
+
+	echo $LIBDIRSUFFIX
+	return 0
+}
+
+# load all modules
+
+ARCHITECTURE=$(get_architecture)
+TEMP_DIR=$()
+
+for MODULE in modules/*.sh
+do
+	echo "load $MODULE"
+	source "$MODULE"
+done
+
+MODULE="incard"
+
+if ! DRIVER_ARCHIVES=$("${MODULE}_download_driver" "$ARCHITECTURE" "$TEMP_DIR")
+then # se lo scaricamento fallisce
+	exit 1
+fi
+
+for ARCHIVE in $DRIVER_ARCHIVES
+do
+	if ! FILES_ARCHIVES=$("${MODULE}_extract_driver" "$ARCHIVE")
+	then # se la scompattazione dei driver fallisce
+		exit 1
+	
+	else
+		for FILE in $FILES_ARCHIVES
+		do
+			if ! "${MODULE}_install_driver" "$ARCHITECTURE" "$FILE"
+			then # se l'installazione dei driver fallisce
+				exit 1
+			fi
+		done
+	fi
+done
+

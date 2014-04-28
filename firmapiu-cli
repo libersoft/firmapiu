@@ -1,0 +1,903 @@
+#!/bin/bash
+
+# per vedere il rendiconto https://servizi.arubapec.it/tsa/rendiconto.jsp
+
+# Quando voglio firmate i file
+# IN:  il file da firmare
+# OUT: un trusted timestamp generato da aruba (file .tsr time stamp reply) relativo al file
+#      da firmare (aruba fa un hash sha256 nel file .tsr)
+# OUT: un file p7m che e' il file di firma (anche se l'estenzione e' .p7m il tipo del file
+#      e' DER)
+# OUT: un file xml contenente una rappresentazione di tutti i file firmati
+
+# Quando voglio verificare la firma di un file
+# IN:  un file xml contenente una rappresentazione di tutti i file firmati
+# IN:  il file del quale voglio verificare la firma
+# IN:  il trusted timestamp di quel file (.tsr)
+#      Sapendo che nel file e' contenuta una sha256 ne effettuo una sul file di risposta
+#      e li confronto
+# IN:  il file p7m che e' il file di firma (anche se l'estenzione e' .p7m il tipo del file
+#      e' DER)
+# OUT: il risultato se il file e' stato effettivamente firmato
+#      da quel destinatario
+
+# VARIABILI che possono essere passate al programma
+# -- LIBRARY_PATH path che indica la libreria della smartcard
+# -- TSA_SERVER server di Timestamp Autority a cui effettuare le richieste (rfc3161)
+# -- TSA_USERNAME username del server tsa
+# -- TSA_PASSWORD password del server tsa
+
+print_usage() {
+	echo "Uso: firmapiu-cli [OPTION]... file"
+	echo
+	echo "  -h, --help"
+	echo "                 Visualizza l'help"
+	echo "  -d, --debug"
+	echo "                 Mostra piu' output, utile per il debug del programma"
+	echo "  -p, --color"
+	echo "                 Mostra l'output colorato (messaggi debug BLU, messaggi errore ROSSO)"
+	echo "  -c, --config-file file"
+	echo "                 Usa il file di configurazione 'file' passato come parametro"
+	echo "  -o, --output-dir directory"
+	echo "                 Salva i file generati nella directory passata, in maniera gerarchica"
+	echo "  -i, --input-dir directory"
+	echo "                 Cerca i file firmati un una directory"
+	echo "  -g, --get-atr-info"
+	echo "                 Ottiene delle informazioni sull'ATR"
+	echo "  --maintain-timestamp-query"
+	echo "                 Mantiene la richiesta di timestamp"
+	echo "  --disable-timestamp-request"
+	echo "                 Disabilita la richiesta di timestamp (nel caso si voglia fare dei test senza sprecare timestamp query)"
+	echo "  --disable-sign"
+	echo "                 Disabilita la firma con openssl"
+	echo "  -s, --sign file1|dir1 [file2|dir2]..."
+	echo "                 Firma i file passati come argomento"
+	echo "  -v, --verify file1|dir1 [file2|dir2]..."
+	echo "                 Verifica la firma dei file passati come argomento"
+	echo "  -r, --remaning-sign"
+	echo "                 Controlla il numero di firme rimaste"
+	echo "  -u, --unblock-pin"
+	echo "                 Sblocca il PIN della smartcard"
+	echo "  -t, --test-pin"
+	echo "                 Testa il PIN dell smartcard"
+}
+
+print_header(){
+	TEXT_BOLD_BLU='\e[1;34m'
+	TEXT_NORMAL='\e[0m'
+
+	if [ -n "$COLOR" ]
+	then
+		echo -e "${TEXT_BOLD_BLU}############### $1 ####################${TEXT_NORMAL}"
+	else
+		echo -e "############### $1 ####################"
+	fi
+}
+
+# $1 messaggio da stampare
+print_debug(){
+	TEXT_BLU='\e[0;34m'
+	TEXT_NORMAL='\e[2m'
+
+	if [ -n "$DEBUG" ]
+	then
+		if [ -n "$COLOR" ] # output colorato
+		then
+			echo -e "${TEXT_BLU}DEBUG: $1${TEXT_NORMAL}" >&2
+		else
+			echo -e "DEBUG: $1" >&2
+		fi
+	fi
+}
+
+# $1 messaggio da stampare
+print_error(){
+	TEXT_RED='\e[0;31m'
+	TEXT_NORMAL='\e[0m'
+
+	if [ -n "$COLOR" ]
+	then
+		echo -e "${TEXT_RED}ERRORE: $1${TEXT_NORMAL}" >&2
+	else
+		echo -e "ERRORE: $1" >&2
+	fi
+}
+
+load_config(){
+	GLOBAL_CONFIG_FILE="/etc/firmapiu/firmapiurc"
+	USER_CONFIG_FILE="$HOME/.firmapiurc"
+
+	if check_variable "CONFIG_FILE" > /dev/null && check_file_existance "$CONFIG_FILE" "YES"
+	then
+		print_debug "load custom $CONFIG_FILE config file"
+		source "$CONFIG_FILE"
+	elif check_file_existance "$USER_CONFIG_FILE" "YES"
+	then
+		print_debug "load $USER_CONFIG_FILE config file"
+		source "$USER_CONFIG_FILE"
+	elif check_file_existance "$GLOBAL_CONFIG_FILE" "YES"
+	then
+		print_debug "load $GLOBAL_CONFIG_FILE config file"
+		source "$GLOBAL_CONFIG_FILE"
+	else
+		print_error "config file not found"
+		return 1
+	fi
+
+	return 0
+}
+
+create_temp_file(){
+	print_debug "create temp file"
+	if ! TEMP_FILE=$(tempfile) # creo un file temporaneo
+	then
+		print_error "unable to create temp file"
+		return 1
+	fi
+
+	print_debug "file $TEMP_FILE created"
+	echo $TEMP_FILE
+	return 0
+}
+
+# $1 il file di cui si vuole controllare l'esistenza
+# $2 se viene definito anche il secondo parametro non viene stampato un messaggio di errore
+#    ma sono uno di debug
+check_file_existance(){
+	NOT_SEVERE="$2" # se settata non tratta l'assenza di un file come un messaggiod di errore
+	print_debug "check for $1 existance"
+	if [ -f "$1" ]
+	then
+		return 0
+	else
+		if [ -n "$NOT_SEVERE" ] # lo stampo come debug
+		then
+			print_debug "file $1 not present"
+		else
+			print_error "file $1 not present"
+		fi
+		return 1
+	fi
+}
+
+# Si comporta come check_file_existance solo che con le directory
+check_directory_existance(){
+	NOT_SEVERE="$2"
+	print_debug "check for directory $1 existance"
+	if [ -d "$1" ]
+	then
+		return 0
+	else
+		if [ -n "$NOT_SEVERE" ]
+		then
+			print_debug "directory $1 not present"
+		else
+			print_error "directory $1 not present"
+		fi
+		return 1
+	fi
+}
+
+# $1 il nome della variabile non la variabile (senza il dollaro)
+#    di cui si vuole controllare l'esistenza
+check_variable(){
+	VARIABLE=$1
+
+	# Alternativa eval echo \$$VARIABLE
+	print_debug "check for $VARIABLE variable existance"
+	if [ -z "${!VARIABLE}" ]
+	then
+		print_debug "variable $VARIABLE not defined"
+		#print_error "variable $VARIABLE not defined"
+		return 1
+	fi
+
+	echo "${!VARIABLE}"
+	return 0
+}
+
+# $1 la variabile da controllare se e' definita (lunghezza maggiore di 0)
+# $2 messaggio di richiesta della variabile
+# $3 indicare del la lettura dovra essere visibile o meno
+check_variable_and_read(){
+	VARIABLE=$1
+	MESSAGE_INPUT=$2
+	HIDDEN=$3
+
+	check_variable $VARIABLE && return 0 # se la variabile e' gia definita
+
+	echo "${MESSAGE_INPUT}:" >&2 # stampo il messaggio di input sullo standard error
+
+	if [ -n "$HIDDEN" ] # se non voglio stampare la password
+	then
+		read -s INPUT || return 1
+	else
+		read INPUT || return 1
+	fi
+
+	echo "$INPUT"
+	return 0
+}
+
+# Controlla se il demone pcscd e' attivo
+check_pcscd_daemon(){
+	if pgrep "pcscd" > /dev/null
+	then
+		return 0
+	else
+		print_error "No pcscd daemon running"
+		return 1
+	fi
+}
+
+# $1 comando da eseguire
+# $2 directory contenente i file del quale eseguire i comandi
+directory_command(){
+	COMMAND="$1"
+	DIRECTORY="$2"
+
+	for fileIn in $DIRECTORY/*
+	do
+		if [ -d "$fileIn" ]
+		then
+			directory_command "$COMMAND" "$fileIn"
+		elif [ -f "$fileIn" ]
+		then
+			$COMMAND "$fileIn"
+		fi
+	done
+}
+
+# Esegue il comando su lista di file o directory, in caso di directory esegure il
+# comando su tutti i file delle directory
+# $1 comando da eseguire
+# $@ lista di file e directory del quale eseguire i comandi
+execute_command_to_list(){
+	COMMAND="$1"
+
+	shift
+
+	for fileInput in $@
+	do
+		if [ ! -e "$fileInput" ]
+		then
+			print_error "file $fileInput not exist"
+		else
+			if [ -d "$fileInput" ]
+			then
+				# Ho trovato una directory
+				print_debug "find directory ($fileInput), I will examinell files on it"
+				directory_command "$COMMAND" "$fileInput"
+			elif [ -f "$fileInput" ]
+			then
+				print_debug "execute $COMMAND to $fileInput"
+				$COMMAND "$fileInput"
+			fi
+		fi
+	done
+}
+
+# Ottengo il certificato dalla smartcard
+# restituisce il path del file contenente il certificate pem della smartcard
+get_pem_certificate(){
+	print_debug "get pem certificate"
+
+	check_variable LIBRARY_PATH > /dev/null || return 1 # testo l'esistenza della variabile
+
+	print_debug "find smartcard certificate"
+	# Ottengo il certificato in formato DER (Distinguish Encoded Rules)
+	ID_HEX="30"
+	ID_INT="0"
+	FOUND=""
+
+	while [ -z "$FOUND" ]
+	do
+		ID_CERT="4453${ID_HEX}"
+		print_debug "trying with certificate DS${ID_INT} id $ID_CERT"
+		# se assgeno l'output a una variabile non funziona"
+		# TODO da mettere il certificato in un file temporaneo
+		if pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
+		then
+			print_debug "find DS${ID_INT} certificate"
+			FOUND="1"
+		else
+			print_debug "DS${ID_INT} non found"
+		fi
+		let "ID_HEX++"
+		let "ID_INT++"
+	done
+
+	PEM_CERT_FILE=$(create_temp_file) || return 1
+
+	print_debug "convert certificate in PEM form"
+	# PEM files are just base64 encoded versions of the DER encoded data
+	# Se ho ottenuto il certificato lo converto in PEM
+	if ! cat "certificate.der" | openssl x509 -inform der -outform pem -out "$PEM_CERT_FILE"
+	then
+		print_error "failed to convert certificate (to DER to PEM)"
+		return 1
+	fi
+
+	echo "$PEM_CERT_FILE"
+	return 0
+}
+
+# $1 file da firmare
+# Se ha successo restituisce il nome del file p7m creato
+sign_file_with_pem_certificate(){
+	FILE_TO_SIGN="$1"
+
+	print_debug "sign file with PEM certificate"
+
+	check_variable FILE_TO_SIGN > /dev/null || return 1
+
+	check_file_existance "$FILE_TO_SIGN" || return 1
+
+	check_variable LIBRARY_PATH > /dev/null || return 1 # testo l'esistenza della variabile
+
+	check_variable SMARTCARD_PIN > /dev/null || return 1 # testo l'esistenza della variabile
+
+	check_variable SMARTCARD_CERTIFICATE_FILE > /dev/null || return 1 # testo l'esistenza della variabile
+	check_file_existance "$SMARTCARD_CERTIFICATE_FILE" || return 1
+
+	check_variable ENGINE_PATH > /dev/null || return 1 # testo l'esistenza della variabile
+
+	print_debug "start openssl"
+	# Firmo il file con openssl e caricando l'engine del lettore di smartcard
+	FILE_SIGNED=$(append_output_dir "${FILE_TO_SIGN}.p7m") # l'output del file e'$FILE_SIGNED
+
+	# TODO da fixare l'id usato
+	(cat << EOF | openssl ) > /dev/null
+engine dynamic \
+	-pre SO_PATH:${ENGINE_PATH} \
+	-pre ID:pkcs11 \
+	-pre LIST_ADD:1 \
+	-pre LOAD \
+	-pre MODULE_PATH:${LIBRARY_PATH} \
+	-pre PIN:${SMARTCARD_PIN}
+smime -nodetach \
+	-binary \
+	-outform DER \
+	-sign \
+	-signer ${SMARTCARD_CERTIFICATE_FILE} \
+	-inkey  id_445330 \
+	-keyform engine \
+	-engine pkcs11 \
+	-in ${FILE_TO_SIGN} \
+	-out ${FILE_SIGNED}
+exit
+EOF
+
+	echo "$FILE_SIGNED"
+	return 0
+}
+
+# Funzione che restituisce l'atr del lettore
+get_atr(){
+	print_debug "get ATR from smartcard reader"
+
+	if ATR=$(opensc-tool --atr 2>/dev/null)
+	then
+		print_debug "find atr $ATR"
+		echo $ATR
+		return 0
+	else
+		print_error "failed to read ATR"
+		return 1
+	fi
+}
+
+# Restituisce la libreria relativa a quel lettore
+# $1 atr del dispositivo
+get_library_path(){
+	ATR="$1"
+	LIBRARY_PATH=""
+
+	print_debug "get library for the smartcard reader"
+
+	case $ATR in
+		"3b:df:00:00:81:31:fe:00:00:6b:00:0c:00:00:01:00:01:43:4e:53:10:31:80:00"|\
+		"3b:df:18:00:81:31:fe:7d:00:6b:15:0c:01:81:01:11:01:43:4e:53:10:31:80:e8")
+			LIBRARY_PATH="/usr/local/lib/libaseCnsP11.so"
+			;;
+		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:11:01:43:4e:53:11:31:80:8e"|\
+		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:00:01:43:4e:53:00:31:80:00"|\
+		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:03:03:01:01:01:43:4e:53:10:31:80:9d")
+			LIBRARY_PATH="/usr/local/lib/libbit4ipki.so"
+			;;
+		*)
+			;;
+	esac
+
+	if [ -z "$LIBRARY_PATH" ]
+	then
+		print_error "No library found for the ATR"
+		return 1
+	else
+		print_debug "find library path $LIBRARY_PATH"
+		echo $LIBRARY_PATH
+		return 0
+	fi
+}
+
+# Crea una richiesta di Trusted Timestamp con openssl e
+# la invia ad aruba per ricevere la risposta
+# $1 file del quale firmare il timestamp
+get_timestamp_reply(){
+	FILE_INPUT=$1
+
+	print_debug "get timestamp reply"
+
+	check_variable TSA_SERVER > /dev/null || return 1
+	check_variable TSA_USERNAME > /dev/null || return 1
+	check_variable TSA_PASSWORD > /dev/null || return 1
+
+	check_file_existance "$FILE_INPUT" || return 1
+
+	# se la variabile e' settata, mantengo la richiesta
+	if check_variable MAINTAIN_TIMESTAMP_QUERY > /dev/null
+	then
+		TS_QUERY_FILE="${FILE_INPUT}.tsq"
+	else
+		TS_QUERY_FILE=$(create_temp_file) || return 1
+	fi
+
+	print_debug "create timestamp query with openssl"
+	if ! openssl ts -query -cert -sha256 -no_nonce -data "$FILE_INPUT" -out "$TS_QUERY_FILE"
+	then
+		print_error "creation timestamp query failed"
+		return 1
+	fi
+	print_debug "file $TS_QUERY_FILE created with TSQ"
+
+	# il file viene salvato nel file $TS_REPLY_FILE
+	TS_REPLY_FILE=$(append_output_dir "${FILE_INPUT}.tsr") # la risposta avra' estensione tsr
+
+	print_debug "send request using TSA server: '$TSA_SERVER'"
+	if ! curl --silent \
+		--insecure \
+		--user "$TSA_USERNAME:$TSA_PASSWORD" \
+		--header "Content-Type: application/timestamp-query" \
+		--data-binary @$TS_QUERY_FILE \
+		--output "$TS_REPLY_FILE" \
+		"$TSA_SERVER" #Ottengo la risposta da aruba
+	then
+		print_error "Non sono riuscito ad ottenere la Time Stamp Reply da Aruba"
+		return 1
+	fi
+
+	# da controllare se il certificato e' giusto
+
+	rm $TS_QUERY_FILE
+	echo "$TS_REPLY_FILE"
+	return 0
+}
+
+# Ottiene il file per la verifica del timestamp TSR e firma con il certificato il file
+# $1 file che vogliamo elaborare
+sign_with_certificate(){
+	FILE_INPUT=$1
+	print_debug "elaborate file $FILE_INPUT"
+
+	# se sono state disabilitate le richieste
+	if ! check_variable DISABLE_TIMESTAMP_REQUEST > /dev/null
+	then
+		# Ottengo la TSR dal server TSA
+		TIMESTAMP_REPLY_FILE=$(get_timestamp_reply "$FILE_INPUT") || return 1
+		print_debug "timestamp reply file '$TIMESTAMP_REPLY_FILE' created"
+	fi
+
+	# se e' stata disabilitata la firma
+	if ! check_variable DISABLE_SIGN > /dev/null
+	then
+		# Firmo con il certificato ottenuto
+		SIGN_FILE=$(sign_file_with_pem_certificate "$FILE_INPUT") || return 1
+		print_debug "sign file '$SIGN_FILE' created"
+	fi
+
+	return 0
+}
+
+sign(){
+	initial_check || return 1
+
+	print_header "FIRMA"
+
+	print_debug "file to sign $*"
+
+	# controllo se la variabile non e' stata definita dall'utente
+	if ! check_variable LIBRARY_PATH > /dev/null
+	then
+		# Ottengo il path della libreria del lettore
+		ATR=$(get_atr) || return 1
+		LIBRARY_PATH=$(get_library_path "$ATR") || return 1
+	fi
+	print_debug "use LIBRARY_PATH=$LIBRARY_PATH"
+	check_file_existance "$LIBRARY_PATH" || return 1
+	export LIBRARY_PATH
+
+	ENGINE_PATH=$(check_variable_and_read ENGINE_PATH "Insert engine pkcs11 path")
+	print_debug "use ENGINE_PATH=$ENGINE_PATH"
+	check_file_existance "$ENGINE_PATH" || return 1
+	export ENGINE_PATH
+
+	# controllo se le variabili sono definite
+	TSA_SERVER=$(check_variable_and_read TSA_SERVER "Insert Tsa Server name")
+	print_debug "use TSA_SERVER=$TSA_SERVER"
+	export TSA_SERVER
+
+	TSA_USERNAME=$(check_variable_and_read TSA_USERNAME "Insert Tsa username")
+	print_debug "use TSA_USERNAME=$TSA_USERNAME"
+	export TSA_USERNAME
+
+	TSA_PASSWORD=$(check_variable_and_read TSA_PASSWORD "Insert Tsa password" "yes")
+	print_debug "use TSA_PASSWORD=$TSA_PASSWORD"
+	export TSA_PASSWORD
+
+	# Ottengo il certificato dalla smartcard
+	SMARTCARD_CERTIFICATE_FILE=$(get_pem_certificate) || return 1
+	export SMARTCARD_CERTIFICATE_FILE
+
+	# Ottengo il pin della smartcard
+	SMARTCARD_PIN=$(check_variable_and_read SMARTCARD_PIN "Insert Smartcard Pin" "yes")
+	print_debug "use SMARTCARD_PIN=$SMARTCARD_PIN"
+	export SMARTCARD_PIN
+
+	# eseguo il comando di firma su tutta la lista
+	print_debug "start executing command list"
+	execute_command_to_list sign_with_certificate $@ || return 1
+
+	return 0
+}
+
+# $1 file da verificare
+verify_sign(){
+	SIGN_FILE=$1
+
+	print_debug "verify sign $SIGN_FILE with certificate $SMARTCARD_CERTIFICATE_FILE"
+	# il file p7m e codificato in DER
+	# il certificato e' codificato in PEM
+	if ! openssl smime -verify -inform DER -in "$SIGN_FILE" -noverify "$SMARTCARD_CERTIFICATE_FILE" > /dev/null 2>&1
+	then
+		print_error "sign verify fail"
+		return 1
+	fi
+
+	print_debug "sign verify succesfull"
+	return 0
+}
+
+# $1 file da verificare
+verify_timestamp(){
+	FILE_INPUT=$1
+	TIMESTAMP_REPLY_FILE=$2
+
+	print_debug "verify timestamp $FILE_INPUT with $TIMESTAMP_REPLY_FILE timestamp reply"
+
+	TIMESTAMP_HASH=$(openssl ts -reply -in "$TIMESTAMP_REPLY_FILE" -text |\
+		grep -o "\([a-z0-9]\{2\}[ ]*\)\{8\}"
+		sed -e "s/ //g" |\
+		paste --delimiters "" - - - -)
+	print_debug "TIMESTAMP_HASH = '$TIMESTAMP_HASH'"
+
+	FILE_HASH=$(sha256sum "$FILE_INPUT" | awk '{print $1}')
+	print_debug "FILE_HASH = '$FILE_HASH'"
+
+	if [ "$TIMESTAMP_HASH" == "$FILE_HASH" ]
+	then
+		print_debug "timestamp hash and file hash correspond"
+		return 0
+	else
+		print_error "timestamp hash and file hash not correspond"
+		return 1
+	fi
+
+}
+
+verify_file(){
+	FILE_INPUT=$1
+
+	print_debug "elaborate file $FILE_INPUT"
+
+	check_variable SMARTCARD_CERTIFICATE_FILE > /dev/null || return 1
+
+	if ! check_variable "DISABLE_SIGN" > /dev/null
+	then
+		# deve essere presente il file p7m
+		SIGN_FILE=$(append_input_dir "${FILE_INPUT}.p7m")
+		check_file_existance "$SIGN_FILE" || return 1
+		# verifico la correttezza della firma
+		verify_sign "$SIGN_FILE" || return 1
+	fi
+
+	if ! check_variable "DISABLE_TIMESTAMP_REQUEST" > /dev/null
+	then
+		# deve essere presente il file tsr
+		TIMESTAMP_REPLY_FILE=$(append_input_dir "${FILE_INPUT}.tsr")
+		check_file_existance "$TIMESTAMP_REPLY_FILE" || return 1
+		# verifico la correttezza del file TSQ
+		verify_timestamp "$FILE_INPUT" "$TIMESTAMP_REPLY_FILE" || return 1
+	fi
+
+
+	print_debug "file $FILE_INPUT checked success"
+	return 0
+
+}
+
+verify(){
+	initial_check || return 1
+
+	print_header "VERIFICA"
+
+	print_debug "file to verify $@"
+
+	# controllo se la variabile non e' stata definita dall'utente
+	if ! check_variable LIBRARY_PATH > /dev/null
+	then
+		# Ottengo il path della libreria del lettore
+		ATR=$(get_atr) || return 1
+		LIBRARY_PATH=$(get_library_path "$ATR") || return 1
+	fi
+	print_debug "use LIBRARY_PATH=$LIBRARY_PATH"
+	check_file_existance "$LIBRARY_PATH" || return 1
+	export LIBRARY_PATH
+
+	# Ottengo il certificato dalla smartcard
+	SMARTCARD_CERTIFICATE_FILE=$(get_pem_certificate) || return 1
+	export SMARTCARD_CERTIFICATE_FILE
+
+	# eseguo il comando di firma su tutta la lista
+	execute_command_to_list verify_file $@
+
+}
+
+check_remaning_sign(){
+	print_debug "check remaning sign"
+
+	TSA_USERNAME=$(check_variable_and_read TSA_USERNAME "Insert Tsa username")
+	print_debug "use TSA_USERNAME=$TSA_USERNAME"
+
+	TSA_PASSWORD=$(check_variable_and_read TSA_PASSWORD "Insert Tsa password" "yes")
+	print_debug "use TSA_PASSWORD=$TSA_PASSWORD"
+
+	REMANING=$(wget -q -O - \
+		--http-user "$TSA_USERNAME" \
+		--http-password "$TSA_PASSWORD" \
+		https://servizi.arubapec.it/tsa/rendiconto.jsp |\
+		grep -o "Marche Residue:[0-9]\+" |\
+		sed "s/Marche Residue://")
+
+	if [ -z "$REMANING" ]
+	then
+		print_error "connection error"
+		return 1
+	else
+		echo "$REMANING"
+		return 0
+	fi
+}
+
+initial_check(){
+	check_pcscd_daemon || return 1 # controllo se il demone pcscd e' attivo
+	check_output_dir || return 1 # controllo se esiste la directory di output
+	check_input_dir || return 1
+
+	return 0
+}
+
+# restituisce il path di uscita opportunamente modificato nel caso venga specificata
+# una directory di output (--output-dir)
+# nel caso il path della directory non esista viene creato
+# $1 il file di input
+append_output_dir(){
+	INPUT_PATH="$1"
+
+	if check_variable "OUTPUT_DIR" > /dev/null # se e' stata definita una directory
+	then
+		OUTPUT_PATH="${OUTPUT_DIR}/${INPUT_PATH}" #modifico il path mettendolo in cosa all'output-dir
+		print_debug "append output path to original path '$OUTPUT_PATH'"
+		DIRNAME=$(dirname "$OUTPUT_PATH")
+		print_debug "check for directory exist '$DIRNAME'"
+		if ! check_directory_existance "DIRNAME" "YES" # se la directory non esiste TODO viene sempre creata
+		then
+			print_debug "creating '$DIRNAME'"
+			mkdir -p "$DIRNAME" # ls creo
+		fi
+	else
+		OUTPUT_PATH="$INPUT_PATH" # lascio invariato il path
+	fi
+
+	echo "$OUTPUT_PATH"
+	return 0
+}
+
+append_input_dir(){
+	INPUT_PATH="$1"
+
+	if check_variable "INPUT_DIR" > /dev/null # se e' stata definita la directory
+	then
+		OUTPUT_PATH="${INPUT_DIR}/${INPUT_PATH}"
+		print_debug "append output path to original path '$OUTPUT_PATH'"
+	else
+		OUTPUT_PATH="$INPUT_PATH" # lascio invariato il path
+	fi
+
+	echo "$OUTPUT_PATH"
+	return 0
+}
+
+check_input_dir(){
+	print_debug "check input directory"
+
+	if check_variable "INPUT_DIR" > /dev/null
+	then
+		if ! check_directory_existance "$INPUT_DIR"
+		then
+			return 1 # se la directory non esiste restituisco errore
+		else
+			return 0
+		fi
+	fi
+
+	return 0 # se la variabile non e' stata definita esco senza errori
+}
+
+check_output_dir(){ #Salvo tutti i file nella directory
+
+	print_debug "check output directory"
+
+	if check_variable "OUTPUT_DIR" > /dev/null # se la variabile e' stata definita
+	then
+		if ! check_directory_existance "$OUTPUT_DIR"
+		then
+			mkdir -p "$OUTPUT_DIR" # se la directory non esiste la creo
+			print_debug "output directory '$OUTPUT_DIR' created"
+		else
+			print_debug "output directory '$OUTPUT_DIR' already exists"
+		fi
+	fi
+
+	return 0 # al momento restituisco sempre successo
+}
+
+get_atr_info(){
+	print_debug "get atr info"
+	ATR_INFO_SITE="http://ludovic.rousseau.free.fr/softwares/pcsc-tools/smartcard_list.txt"
+	LIST_ATR=$(create_temp_file) || return 1
+
+	ATR=$(get_atr) || return 1
+	ATR=$(echo $ATR | sed -e 's/:/ /g' -e 's/\(.*\)/\U\1/g') # rinomino ATR
+
+	print_debug "download list from $ATR_INFO_SITE"
+	wget --quiet -O "$LIST_ATR" "$ATR_INFO_SITE" || return 1
+
+	exec 3< "$LIST_ATR"
+
+	while read -u 3 LINE
+	do
+		if [ -n "$FIND_ATR" ]
+		then
+			if [ -z "$LINE" ]
+			then
+				FIND_ATR=""
+			else
+				echo $LINE | sed "s/\t//g"
+			fi
+		fi
+
+		if [ "$ATR" == "$LINE" ]
+		then
+			FIND_ATR="1"
+		fi
+	done
+
+	exec 3>&-
+
+	rm "$LIST_ATR"
+	return 0
+}
+
+unblock_pin(){
+	check_pcscd_daemon || return 1
+	print_debug "unlock PIN using external tool pkcs15-tool"
+	pkcs15-tool -u
+}
+
+test_pin(){
+	check_pcscd_daemon || return 1
+	print_debug "testing smartcard PIN using external pkcs11-tool"
+	# CONTROLLARE nel caso opensc-pkcs11.so non sia presente
+	#sc_dlopen failed: opensc-pkcs11.so: cannot open shared object file: No such file or directory
+	#./firmapiu-cli: line 612:  3759 Errore di segmentazione pkcs11-tool -lt --module opensc-pkcs11.so
+	if ! pkcs11-tool -lt --module opensc-pkcs11.so
+	then
+		print_error "uncorrect pin"
+	fi
+}
+
+IFS=$''
+
+if [ "$#" -eq "0" ]
+then
+	print_usage
+	exit 1
+fi
+
+
+while [ "$#" -gt "0" ]
+do
+	OPT="$1"
+	print_debug "parametro $OPT"
+	case "$OPT" in
+		-d|--debug)
+			DEBUG="1"
+			print_debug "DEBUG enabled"
+			;;
+		-p|--color)
+			COLOR="1"
+			;;
+		-c|--config-file)
+			CONFIG_FILE="$2"
+			shift
+			;;
+		-h|--help)
+			print_usage
+			;;
+		-o|--output-dir)
+			OUTPUT_DIR="$2"
+			print_debug "output directory enabled"
+			shift
+			;;
+		-i|--input-dir)
+			INPUT_DIR="$2"
+			print_debug "input directory enabled"
+			shift
+			;;
+		--disable-timestamp-request)
+			DISABLE_TIMESTAMP_REQUEST="1"
+			print_debug "timestamp request disabled"
+			;;
+		--maintain-timestamp-query)
+			MAINTAIN_TIMESTAMP_QUERY="1"
+			print_debug "maintain timestamp query enabled"
+			;;
+		-g|--get-atr-info)
+			get_atr_info || exit 1
+			;;
+		--disable-sign)
+			DISABLE_SIGN="1"
+			print_debug "sign disabled"
+			;;
+		-s|--sign)
+			shift
+			load_config || exit 1
+			sign $@ || exit 1
+			shift "$#" # per non fare ciclare sui file che ho esaminato
+			;;
+		-v|--verify)
+			shift
+			load_config || exit 1
+			verify $@ || exit 1
+			shift "$#" # per non fare ciclare sui file che ho esaminato
+			;;
+		-r|--remaning-sign)
+			load_config || exit 1
+			check_remaning_sign || exit 1
+			;;
+		-u|--unblock-pin)
+			unblock_pin || exit 1
+			;;
+		-t|--test-pin)
+			test_pin || exit 1
+			;;
+		*)
+			print_error "unknow option $OPT"
+			exit 1
+			;;
+	esac
+
+	shift
+done
+
+unset IFS
