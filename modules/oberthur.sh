@@ -1,31 +1,32 @@
 #!/bin/bash
 
 # $1 Architettura del pc (i386, x86_64)
-incard_download_driver(){
+oberthur_download_driver(){
 	ARCH=$1
 
 	# Si per la versione a 64 che 32 bit
-	INCARD_DOWNLOAD_URL="https://www.pec.it/Download/Software/FirmaDigitale/MU_INCARD1290_LINUX.zip"
-	OUT_FILE="incard.zip"
+	DOWNLOAD_URL="http://www.pec.it/Download/Software/FirmaDigitale/MU_OBERTHUR1283_LINUX.zip"
+	OUT_FILE="oberthur.zip"
 
-	if ! wget -q -O "$OUT_FILE" "$INCARD_DOWNLOAD_URL"
+	if ! wget -q -O "$OUT_FILE" "$DOWNLOAD_URL"
 	then
 		return 1
 	else
 		echo "$OUT_FILE"
 		return 0
 	fi
+
 }
 
 # $1 path dell'archivio scaricato (uno per volta)
 # $2 architettura del pc
-incard_extract_driver(){
+oberthur_extract_driver(){
 	ARCHIVE=$1
 	ARCH=$2
 
-	if [ ! "$ARCHIVE" == "incard.zip" ]
+	if [ ! "$ARCHIVE" == "oberthur.zip" ]
 	then
-		print_error "failed to find incard.zip"
+		print_error "failed to find oberthur.zip"
 		return 1
 	fi
 
@@ -37,15 +38,13 @@ incard_extract_driver(){
 
 	case "$ARCH" in
 		i386)
-			echo "libbit4ipki.so"
-			echo "libbit4ipki.so.conf"
-			echo "libbit4ipki.so_pin.py"
+			echo "32/libbit4opki.so"
+			echo "32/libbit4opki.so.conf"
 			return 0
 			;;
 		x86_64)
-			echo "x64/libbit4ipki.so"
-			echo "x64/libbit4ipki.so.conf"
-			echo "x64/libbit4ipki.so_pin.py"
+			echo "64/libbit4opki.so"
+			echo "64/libbit4opki.so.conf" 
 			return 0
 			;;
 		*)
@@ -59,7 +58,7 @@ incard_extract_driver(){
 # $1 Architettura del pc (i386, x86_64)
 # $2 path del file scompattato (uno per volta)
 # $3 path della libreria dove installare i file .so (si possono usare anche altre dir)
-incard_install_driver(){
+oberthur_install_driver(){
 	ARCH=$1
 	FILE=$2
 	LIB_PATH=$3
@@ -67,26 +66,20 @@ incard_install_driver(){
 	case "$ARCH" in
 		i386)
 			case "$FILE" in
-				"libbit4ipki.so")
+				"32/libbit4opki.so")
 					return 0
 					;;
-				"libbit4ipki.so.conf")
-					return 0
-					;;
-				"libbit4ipki.so_pin.py")
+				"32/libbit4opki.so.conf")
 					return 0
 					;;
 			esac
 			;;
 		x86_64)
 			case "$FILE" in
-				"x64/libbit4ipki.so")
+				"64/libbit4opki.so")
 					return 0
 					;;
-				"x64/libbit4ipki.so.conf")
-					return 0
-					;;
-				"x64/libbit4ipki.so_pin.py")
+				"64/libbit4opki.so.conf")
 					return 0
 					;;
 			esac
@@ -98,3 +91,4 @@ incard_install_driver(){
 
 	return 0
 }
+
