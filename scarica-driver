@@ -1,5 +1,8 @@
 #!/bin/bash
 
+DEBUG=1
+COLOR=1
+
 # restituisce l'architettura del pc
 get_architecture(){
 	if [ -z "$ARCH" ]
@@ -33,44 +36,161 @@ get_library_path(){
 		LIBDIRSUFFIX=""
 	fi
 
-	LIBRARYPATH="/usr/local/lib${LIBDIRSUFFIX}/"
+	LIBRARY_PATH="/usr/local/lib${LIBDIRSUFFIX}/"
 
-	echo $LIBDIRSUFFIX
+	echo $LIBRARY_PATH
 	return 0
 }
 
-# load all modules
+# $1 il file di cui si vuole controllare l'esistenza
+# $2 se viene definito anche il secondo parametro non viene stampato un messaggio di errore
+#    ma sono uno di debug
+check_file_existance(){
+	NOT_SEVERE="$2" # se settata non tratta l'assenza di un file come un messaggiod di errore
+	print_debug "check for $1 existance"
+	if [ -f "$1" ]
+	then
+		return 0
+	else
+		if [ -n "$NOT_SEVERE" ] # lo stampo come debug
+		then
+			print_debug "file $1 not present"
+		else
+			print_error "file $1 not present"
+		fi
+		return 1
+	fi
+}
 
-ARCHITECTURE=$(get_architecture)
-TEMP_DIR=$()
+# $1 messaggio da stampare
+print_error(){
+	TEXT_RED='\e[0;31m'
+	TEXT_NORMAL='\e[0m'
+
+	if [ -n "$COLOR" ]
+	then
+		echo -e "${TEXT_RED}ERRORE: $1${TEXT_NORMAL}" >&2
+	else
+		echo -e "ERRORE: $1" >&2
+	fi
+}
+
+# $1 messaggio da stampare
+print_debug(){
+	TEXT_BLU='\e[0;34m'
+	TEXT_NORMAL='\e[2m'
+
+	if [ -n "$DEBUG" ]
+	then
+		if [ -n "$COLOR" ] # output colorato
+		then
+			echo -e "${TEXT_BLU}DEBUG: $1${TEXT_NORMAL}" >&2
+		else
+			echo -e "DEBUG: $1" >&2
+		fi
+	fi
+}
+
+create_temp_dir(){
+	print_debug "create temp directory"
+	if ! TEMP_DIR=$(mktemp -d) # creo una directory temporaneo
+	then
+		print_error "unable to create temp directory"
+		return 1
+	fi
+
+	print_debug "directory $TEMP_DIR created"
+	echo $TEMP_DIR
+	return 0
+}
+
+ARCHITECTURE=$(get_architecture) || exit 1
+LIBRARY_PATH=$(get_library_path "$ARCHITECTURE") || exit 1
+TEMP_DIR=$(create_temp_dir) || exit 1
 
 for MODULE in modules/*.sh
 do
-	echo "load $MODULE"
+	print_debug "load $MODULE"
 	source "$MODULE"
 done
 
-MODULE="incard"
+MODULE="oberthur"
 
-if ! DRIVER_ARCHIVES=$("${MODULE}_download_driver" "$ARCHITECTURE" "$TEMP_DIR")
+print_debug "change directory to $TEMP_DIR"
+cd "$TEMP_DIR" # mi posiziono nella directory temporanea
+
+print_debug "using function ${MODULE}_download_driver"
+if ! DRIVER_ARCHIVES=( $("${MODULE}_download_driver" "$ARCHITECTURE") )
 then # se lo scaricamento fallisce
+	print_error "fallimento scaricamento driver"
 	exit 1
 fi
 
-for ARCHIVE in $DRIVER_ARCHIVES
+TOTAL_ARCHIVE_DRIVER=${#DRIVER_ARCHIVES[@]}
+NUM_ARCHIVE_EXTRACTED=0
+print_debug "$TOTAL_ARCHIVE_DRIVER file to extract"
+
+for ARCHIVE in ${DRIVER_ARCHIVES[@]}
 do
-	if ! FILES_ARCHIVES=$("${MODULE}_extract_driver" "$ARCHIVE")
+	# controlla l'esistenza del file
+	check_file_existance "$ARCHIVE" || exit 1
+	# invoco la funzione del modulo
+	print_debug "passing file $ARCHIVE to ${MODULE}_extract_driver function"
+
+	# da controllare se la funzione esiste
+
+	if ! FILES_ARCHIVES=( $("${MODULE}_extract_driver" "$ARCHIVE" "$ARCHITECTURE") )
 	then # se la scompattazione dei driver fallisce
+		print_error "fallimento scompattamento $ARCHIVE"
 		exit 1
-	
+
 	else
-		for FILE in $FILES_ARCHIVES
+		# ottengo l'array
+		TOTAL_INSTALL_FILE=${#FILES_ARCHIVES[@]}
+		NUM_INSTALLED_FILE=0
+		print_debug "$TOTAL_INSTALL_FILE file to install"
+		
+		for FILE in ${FILES_ARCHIVES[@]}
 		do
-			if ! "${MODULE}_install_driver" "$ARCHITECTURE" "$FILE"
+			# controlla l'esistenza del file
+			check_file_existance "$FILE" || exit 1
+			
+			# da controllare se la funzione esiste
+
+			print_debug "passing file $FILE to ${MODULE}_install_driver function"
+			# invoco la funzione del modulo
+			if ! "${MODULE}_install_driver" "$ARCHITECTURE" "$FILE" "$LIBRARY_PATH"
 			then # se l'installazione dei driver fallisce
+				print_error "fallimento installazione $FILE"
 				exit 1
+			else
+				let "NUM_INSTALLED_FILE++" 
 			fi
 		done
+
+		print_debug "installed file $NUM_INSTALLED_FILE"
+		# controllo che vengano installati tutti i file passati
+		if [ ! "$TOTAL_INSTALL_FILE" -eq "$NUM_INSTALLED_FILE" ]
+		then
+			print_error "non tutti i file passati sono stati installati"
+			exit 1
+		fi
+
+		let "NUM_ARCHIVE_EXTRACTED++"
+
 	fi
 done
 
+print_debug "extracted archive $NUM_ARCHIVE_EXTRACTED"
+# controllo che il numero di file estratti sia uguale a quelli passati	
+if [ ! "$TOTAL_ARCHIVE_DRIVER" -eq "$NUM_ARCHIVE_EXTRACTED" ]
+then
+	print_error "non tutti gli archivi passati sono stati estratti"
+	exit 1
+fi
+
+print_debug "cleaning directory $TEMP_DIR"
+rm -R "$TEMP_DIR"
+
+echo "installation succeded"
+exit 0

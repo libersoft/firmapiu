@@ -127,6 +127,19 @@ load_config(){
 	return 0
 }
 
+create_temp_dir(){
+	print_debug "create temp directory"
+	if ! TEMP_DIR=$(mktemp -d) # creo una directory temporaneo
+	then
+		print_error "unable to create temp directory"
+		return 1
+	fi
+
+	print_debug "directory $TEMP_DIR created"
+	echo $TEMP_DIR
+	return 0
+}
+
 create_temp_file(){
 	print_debug "create temp file"
 	if ! TEMP_FILE=$(tempfile) # creo un file temporaneo
