@@ -43,6 +43,13 @@ oberthur_extract_driver(){
 			;;
 		x86_64)
 			echo "64/libbit4opki.so;64/libbit4opki.so.conf"
+			echo "32/libbit4opki.so"
+			echo "32/libbit4opki.so.conf"
+			return 0
+			;;
+		x86_64)
+			echo "64/libbit4opki.so"
+			echo "64/libbit4opki.so.conf" 
 			return 0
 			;;
 		*)
@@ -72,6 +79,9 @@ oberthur_install_driver(){
 					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
+				"32/libbit4opki.so.conf")
+					return 0
+					;;
 			esac
 			;;
 		x86_64)
@@ -82,6 +92,9 @@ oberthur_install_driver(){
 					;;
 				"64/libbit4opki.so.conf")
 					install "$FILE" "$LIB_PATH" || return 1
+					return 0
+					;;
+				"64/libbit4opki.so.conf")
 					return 0
 					;;
 			esac

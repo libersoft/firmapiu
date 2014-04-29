@@ -42,6 +42,15 @@ incard_extract_driver(){
 			;;
 		x86_64)
 			echo "x64/libbit4ipki.so;x64/libbit4ipki.so.conf;x64/libbit4ipki.so_pin.py"
+			echo "libbit4ipki.so"
+			echo "libbit4ipki.so.conf"
+			echo "libbit4ipki.so_pin.py"
+			return 0
+			;;
+		x86_64)
+			echo "x64/libbit4ipki.so"
+			echo "x64/libbit4ipki.so.conf"
+			echo "x64/libbit4ipki.so_pin.py"
 			return 0
 			;;
 		*)
@@ -75,6 +84,12 @@ incard_install_driver(){
 					install "$FILE" "/usr/local/bin" || return 1
 					return 0
 					;;
+				"libbit4ipki.so.conf")
+					return 0
+					;;
+				"libbit4ipki.so_pin.py")
+					return 0
+					;;
 			esac
 			;;
 		x86_64)
@@ -89,6 +104,12 @@ incard_install_driver(){
 					;;
 				"x64/libbit4ipki.so_pin.py")
 					install "$FILE" "/usr/local/bin" || return 1
+					return 0
+					;;
+				"x64/libbit4ipki.so.conf")
+					return 0
+					;;
+				"x64/libbit4ipki.so_pin.py")
 					return 0
 					;;
 			esac
