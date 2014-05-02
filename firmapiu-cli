@@ -34,6 +34,8 @@ print_usage() {
 	echo "                 Visualizza l'help"
 	echo "  -d, --debug"
 	echo "                 Mostra piu' output, utile per il debug del programma"
+	echo "  --download-driver drivername"
+	echo "                 Scarica il driver da internet"
 	echo "  -p, --color"
 	echo "                 Mostra l'output colorato (messaggi debug BLU, messaggi errore ROSSO)"
 	echo "  -c, --config-file file"
@@ -810,7 +812,201 @@ get_atr_info(){
 	rm "$LIST_ATR"
 	return 0
 }
+###############################################################################
+####################### FUNZIONI PER INSTALLARE I DRIVER ######################
+###############################################################################
+# restituisce l'architettura del pc
+get_architecture(){
+	print_debug "get architecture of current pc"
+	if [ -z "$ARCH" ]
+	then # Se l'architettura e' stata definita
+		case "$( uname -m )" in
+			i?86)
+				ARCH=i386 ;;
+			x86_64)
+				ARCH=x86_64 ;;
+			*)
+				return 1 ;;
+		esac
+	fi
 
+	echo "$ARCH"
+	return 0
+}
+
+MODULES_PATH="./modules"
+
+# stampa la lista di tutti i driver
+list_driver(){
+	print_debug "obtain driver name list"
+	for FILE in $MODULES_PATH/*.sh
+	do
+		basename "$FILE" | sed "s/.sh$//g"
+	done
+	return 0
+}
+
+load_all_modules(){
+	local MODULE # la dichiaro locale perche se no rimane come variabile globale
+
+	for MODULE in $MODULES_PATH/*.sh
+	do
+		print_debug "load $MODULE"
+		source "$MODULE"
+	done
+}
+
+# $1 nome del driver da cercare nella lista dei driver
+check_smartcard_driver_existance(){
+	DRIVER=$1
+
+	LIST_DRIVER=$(list_driver) || return 1
+
+	print_debug "search for driver name existance"
+	if ! echo "$LIST_DRIVER" | grep $DRIVER > /dev/null
+	then
+		print_error "driver name $DRIVER not found" 
+		return 1
+	else
+		print_debug "driver $DRIVER found"
+	fi
+
+	return 0
+}
+
+
+# restituisce il prefisso della libreria
+# $1 architettura del pc
+get_library_path(){
+	ARCH="$1"
+
+	print_debug "get library path for arch '$ARCH'"
+	if [ "$ARCH" = "i486" ]; then
+		LIBDIRSUFFIX=""
+	elif [ "$ARCH" = "i686" ]; then
+		LIBDIRSUFFIX=""
+	elif [ "$ARCH" = "x86_64" ]; then
+		LIBDIRSUFFIX="64"
+	else
+		LIBDIRSUFFIX=""
+	fi
+
+	LIBRARY_PATH="/usr/local/lib${LIBDIRSUFFIX}/"
+
+	echo "$LIBRARY_PATH"
+	return 0
+}
+
+# $1 modulo da usare per l'installazione
+# $2 architettura del pc
+# $3 path della libreria dove posozionare i file
+install_driver_launcher(){
+	MODULE=$1
+	ARCHITECTURE=$2
+	LIBRARY_PATH=$3
+
+	print_debug "using function ${MODULE}_download_driver"
+	if ! DRIVER_ARCHIVES=( $("${MODULE}_download_driver" "$ARCHITECTURE") )
+	then # se lo scaricamento fallisce
+		print_error "fallimento scaricamento driver"
+		return 1
+	fi
+
+	TOTAL_ARCHIVE_DRIVER=${#DRIVER_ARCHIVES[@]}
+	NUM_ARCHIVE_EXTRACTED=0
+	print_debug "$TOTAL_ARCHIVE_DRIVER file to extract"
+
+	for ARCHIVE in ${DRIVER_ARCHIVES[@]}
+	do
+		# controlla l'esistenza del file
+		check_file_existance "$ARCHIVE" || return 1
+		# invoco la funzione del modulo
+		print_debug "passing file $ARCHIVE to ${MODULE}_extract_driver function"
+
+		# da controllare se la funzione esiste
+
+		if ! FILES_ARCHIVES=( $("${MODULE}_extract_driver" "$ARCHIVE" "$ARCHITECTURE") )
+		then # se la scompattazione dei driver fallisce
+			print_error "fallimento scompattamento $ARCHIVE"
+			return 1
+
+		else
+			# ottengo l'array
+			TOTAL_INSTALL_FILE=${#FILES_ARCHIVES[@]}
+			NUM_INSTALLED_FILE=0
+			print_debug "$TOTAL_INSTALL_FILE file to install"
+
+			for FILE in ${FILES_ARCHIVES[@]}
+			do
+				# controlla l'esistenza del file
+				check_file_existance "$FILE" || return 1
+
+				# da controllare se la funzione esiste
+
+				print_debug "passing file $FILE to ${MODULE}_install_driver function"
+				# invoco la funzione del modulo
+				if ! "${MODULE}_install_driver" "$ARCHITECTURE" "$FILE" "$LIBRARY_PATH"
+				then # se l'installazione dei driver fallisce
+					print_error "fallimento installazione $FILE"
+					return 1
+				else
+					let "NUM_INSTALLED_FILE++"
+				fi
+			done
+
+			print_debug "installed file $NUM_INSTALLED_FILE"
+			# controllo che vengano installati tutti i file passati
+			if [ ! "$TOTAL_INSTALL_FILE" -eq "$NUM_INSTALLED_FILE" ]
+			then
+				print_error "non tutti i file passati sono stati installati"
+				return 1
+			fi
+
+			let "NUM_ARCHIVE_EXTRACTED++"
+
+		fi
+	done
+
+	print_debug "extracted archive $NUM_ARCHIVE_EXTRACTED"
+	# controllo che il numero di file estratti sia uguale a quelli passati
+	if [ ! "$TOTAL_ARCHIVE_DRIVER" -eq "$NUM_ARCHIVE_EXTRACTED" ]
+	then
+		print_error "non tutti gli archivi passati sono stati estratti"
+		return 1
+	fi
+	return 0
+}
+
+# S1 nome del driver da installare
+install_driver(){
+	DRIVER_NAME="$1"
+
+	# ottengo il nome del modulo del driver
+	check_smartcard_driver_existance "$DRIVER_NAME" || return 1
+	
+	# ottengo l'architettura
+	ARCHITECTURE=$(get_architecture) || return 1
+	# ottengo la path dove sara' possibile installare le libreria
+	LIBRARY_PATH=$(get_library_path "$ARCHITECTURE") || return 1
+	TEMP_DIR=$(create_temp_dir) || return 1
+
+	load_all_modules || return 1
+
+	print_debug "change directory to $TEMP_DIR"
+	cd "$TEMP_DIR" # mi posiziono nella directory temporanea
+
+	install_driver_launcher "$DRIVER_NAME" "$ARCHITECTURE" "$LIBRARY_PATH" || return 1
+
+	print_debug "cleaning directory $TEMP_DIR"
+	rm -R "$TEMP_DIR"
+
+	echo "installation succeded"
+	return 0
+}
+
+###############################################################################
+####################### FUNZIONI PER IL PIN ###################################
+###############################################################################
 unblock_pin(){
 	check_pcscd_daemon || return 1
 	print_debug "unlock PIN using external tool pkcs15-tool"
@@ -853,6 +1049,14 @@ do
 		-c|--config-file)
 			CONFIG_FILE="$2"
 			shift
+			;;
+		--list-driver)
+			list_driver || exit 1
+			;;
+		--install-driver)
+			DRIVER_NAME="$2"
+			shift
+			install_driver "$DRIVER_NAME" || exit 1
 			;;
 		-h|--help)
 			print_usage
