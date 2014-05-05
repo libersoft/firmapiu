@@ -42,9 +42,6 @@ incard_extract_driver(){
 			;;
 		x86_64)
 			echo "x64/libbit4ipki.so;x64/libbit4ipki.so.conf;x64/libbit4ipki.so_pin.py"
-			echo "libbit4ipki.so"
-			echo "libbit4ipki.so.conf"
-			echo "libbit4ipki.so_pin.py"
 			return 0
 			;;
 		x86_64)
