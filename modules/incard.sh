@@ -72,7 +72,7 @@ incard_install_driver(){
 					return 0
 					;;
 				"libbit4ipki.so_pin.py")
-					install "$FILE" "$LIB_PATH" || return 1
+					install "$FILE" "/usr/local/bin" || return 1
 					return 0
 					;;
 			esac
@@ -88,7 +88,7 @@ incard_install_driver(){
 					return 0
 					;;
 				"x64/libbit4ipki.so_pin.py")
-					install "$FILE" "$LIB_PATH" || return 1
+					install "$FILE" "/usr/local/bin" || return 1
 					return 0
 					;;
 			esac
