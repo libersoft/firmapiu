@@ -27,6 +27,9 @@
 # -- TSA_USERNAME username del server tsa
 # -- TSA_PASSWORD password del server tsa
 
+# path dove verranno messi i moduli
+MODULES_PATH="./modules"
+
 print_usage() {
 	echo "Uso: firmapiu-cli [OPTION]... file"
 	echo
@@ -62,6 +65,18 @@ print_usage() {
 	echo "                 Sblocca il PIN della smartcard"
 	echo "  -t, --test-pin"
 	echo "                 Testa il PIN dell smartcard"
+}
+
+is_root(){
+	print_debug "check if user $USER is root"
+
+	if [ "$USER" == "root" ]
+	then
+		return 0
+	else
+		print_error "non sei l'utente root... prova con sudo"
+		return 1
+	fi
 }
 
 print_header(){
@@ -189,6 +204,20 @@ check_directory_existance(){
 		else
 			print_error "directory $1 not present"
 		fi
+		return 1
+	fi
+}
+
+# controlla se la funzione passata come parametro $1 esiste
+check_function_existance(){
+	FUNCTION_NAME="$1"
+	
+	print_debug "check function $FUNCTION_NAME existance"
+	if [ "$(type -t $FUNCTION_NAME)" == "function" ]
+	then
+		return 0
+	else
+		print_error "funzione $FUNCTION_NAME non trovata"
 		return 1
 	fi
 }
@@ -834,8 +863,6 @@ get_architecture(){
 	return 0
 }
 
-MODULES_PATH="./modules"
-
 # stampa la lista di tutti i driver
 list_driver(){
 	print_debug "obtain driver name list"
@@ -877,7 +904,7 @@ check_smartcard_driver_existance(){
 
 # restituisce il prefisso della libreria
 # $1 architettura del pc
-get_library_path(){
+get_library_driver_path(){
 	ARCH="$1"
 
 	print_debug "get library path for arch '$ARCH'"
@@ -886,7 +913,8 @@ get_library_path(){
 	elif [ "$ARCH" = "i686" ]; then
 		LIBDIRSUFFIX=""
 	elif [ "$ARCH" = "x86_64" ]; then
-		LIBDIRSUFFIX="64"
+		LIBDIRSUFFIX=""
+		#LIBDIRSUFFIX="64" #delle distro usano questa directory le lib a 64 bit
 	else
 		LIBDIRSUFFIX=""
 	fi
@@ -905,6 +933,10 @@ install_driver_launcher(){
 	ARCHITECTURE=$2
 	LIBRARY_PATH=$3
 
+	# controllo l'esistenza della directory di libreria
+	check_directory_existance "$LIBRARY_PATH" || return 1
+	# controllo l'esistenza della funzione
+	check_function_existance "${MODULE}_download_driver" || return 1
 	print_debug "using function ${MODULE}_download_driver"
 	if ! DRIVER_ARCHIVES=( $("${MODULE}_download_driver" "$ARCHITECTURE") )
 	then # se lo scaricamento fallisce
@@ -916,15 +948,19 @@ install_driver_launcher(){
 	NUM_ARCHIVE_EXTRACTED=0
 	print_debug "$TOTAL_ARCHIVE_DRIVER file to extract"
 
+	# setto un nuovo IFS
+	print_debug "change IFS"
+	OLD_IFS=$IFS
+	IFS=';'
+
 	for ARCHIVE in ${DRIVER_ARCHIVES[@]}
 	do
 		# controlla l'esistenza del file
 		check_file_existance "$ARCHIVE" || return 1
+		# controllo se la funzione esiste
+		check_function_existance "${MODULE}_extract_driver" || return 1
 		# invoco la funzione del modulo
 		print_debug "passing file $ARCHIVE to ${MODULE}_extract_driver function"
-
-		# da controllare se la funzione esiste
-
 		if ! FILES_ARCHIVES=( $("${MODULE}_extract_driver" "$ARCHIVE" "$ARCHITECTURE") )
 		then # se la scompattazione dei driver fallisce
 			print_error "fallimento scompattamento $ARCHIVE"
@@ -940,9 +976,8 @@ install_driver_launcher(){
 			do
 				# controlla l'esistenza del file
 				check_file_existance "$FILE" || return 1
-
-				# da controllare se la funzione esiste
-
+				# controllo se la funzione esiste
+				check_function_existance "${MODULE}_install_driver" || return 1
 				print_debug "passing file $FILE to ${MODULE}_install_driver function"
 				# invoco la funzione del modulo
 				if ! "${MODULE}_install_driver" "$ARCHITECTURE" "$FILE" "$LIBRARY_PATH"
@@ -967,6 +1002,9 @@ install_driver_launcher(){
 		fi
 	done
 
+	print_debug "restore old IFS"
+	IFS=$OLD_IFS # ripristino il vecchio IFS
+
 	print_debug "extracted archive $NUM_ARCHIVE_EXTRACTED"
 	# controllo che il numero di file estratti sia uguale a quelli passati
 	if [ ! "$TOTAL_ARCHIVE_DRIVER" -eq "$NUM_ARCHIVE_EXTRACTED" ]
@@ -981,13 +1019,16 @@ install_driver_launcher(){
 install_driver(){
 	DRIVER_NAME="$1"
 
+	# controllo se l'utente e' root
+	is_root || return 1
+
 	# ottengo il nome del modulo del driver
 	check_smartcard_driver_existance "$DRIVER_NAME" || return 1
 	
 	# ottengo l'architettura
 	ARCHITECTURE=$(get_architecture) || return 1
 	# ottengo la path dove sara' possibile installare le libreria
-	LIBRARY_PATH=$(get_library_path "$ARCHITECTURE") || return 1
+	LIBRARY_PATH=$(get_library_driver_path "$ARCHITECTURE") || return 1
 	TEMP_DIR=$(create_temp_dir) || return 1
 
 	load_all_modules || return 1

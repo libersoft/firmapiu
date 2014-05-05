@@ -37,15 +37,11 @@ incard_extract_driver(){
 
 	case "$ARCH" in
 		i386)
-			echo "libbit4ipki.so"
-			echo "libbit4ipki.so.conf"
-			echo "libbit4ipki.so_pin.py"
+			echo "libbit4ipki.so;libbit4ipki.so.conf;libbit4ipki.so_pin.py"
 			return 0
 			;;
 		x86_64)
-			echo "x64/libbit4ipki.so"
-			echo "x64/libbit4ipki.so.conf"
-			echo "x64/libbit4ipki.so_pin.py"
+			echo "x64/libbit4ipki.so;x64/libbit4ipki.so.conf;x64/libbit4ipki.so_pin.py"
 			return 0
 			;;
 		*)
@@ -68,12 +64,15 @@ incard_install_driver(){
 		i386)
 			case "$FILE" in
 				"libbit4ipki.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"libbit4ipki.so.conf")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"libbit4ipki.so_pin.py")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac
@@ -81,12 +80,15 @@ incard_install_driver(){
 		x86_64)
 			case "$FILE" in
 				"x64/libbit4ipki.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"x64/libbit4ipki.so.conf")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"x64/libbit4ipki.so_pin.py")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac

@@ -65,6 +65,7 @@ atena_install_driver(){
 		i386)
 			case "$FILE" in
 				"x86/libaseCnsP11.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac
@@ -72,6 +73,7 @@ atena_install_driver(){
 		x86_64)
 			case "$FILE" in
 				"x64/libaseCnsP11.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac

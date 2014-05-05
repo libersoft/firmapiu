@@ -38,13 +38,11 @@ oberthur_extract_driver(){
 
 	case "$ARCH" in
 		i386)
-			echo "32/libbit4opki.so"
-			echo "32/libbit4opki.so.conf"
+			echo "32/libbit4opki.so;32/libbit4opki.so.conf"
 			return 0
 			;;
 		x86_64)
-			echo "64/libbit4opki.so"
-			echo "64/libbit4opki.so.conf" 
+			echo "64/libbit4opki.so;64/libbit4opki.so.conf"
 			return 0
 			;;
 		*)
@@ -67,9 +65,11 @@ oberthur_install_driver(){
 		i386)
 			case "$FILE" in
 				"32/libbit4opki.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"32/libbit4opki.so.conf")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac
@@ -77,9 +77,11 @@ oberthur_install_driver(){
 		x86_64)
 			case "$FILE" in
 				"64/libbit4opki.so")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 				"64/libbit4opki.so.conf")
+					install "$FILE" "$LIB_PATH" || return 1
 					return 0
 					;;
 			esac
