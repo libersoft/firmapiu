@@ -17,7 +17,7 @@ cardos_download_driver(){
 	then
 		DOWNLOAD_URL="$CARDOS_64_DOWNLOAD_URL"
 	fi
-		
+
 	if ! wget -q -O "$OUT_FILE" "$DOWNLOAD_URL"
 	then
 		return 1

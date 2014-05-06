@@ -38,7 +38,9 @@ print_usage() {
 	echo "  -d, --debug"
 	echo "                 Mostra piu' output, utile per il debug del programma"
 	echo "  --download-driver drivername"
-	echo "                 Scarica il driver da internet"
+	echo "                 Scarica il driver da internet (deve essere eseguito come superuser o root)"
+	echo "  -l, --list-driver"
+	echo "                 lista i possibili driver che si possono installare"
 	echo "  -p, --color"
 	echo "                 Mostra l'output colorato (messaggi debug BLU, messaggi errore ROSSO)"
 	echo "  -c, --config-file file"
@@ -211,7 +213,7 @@ check_directory_existance(){
 # controlla se la funzione passata come parametro $1 esiste
 check_function_existance(){
 	FUNCTION_NAME="$1"
-	
+
 	print_debug "check function $FUNCTION_NAME existance"
 	if [ "$(type -t $FUNCTION_NAME)" == "function" ]
 	then
@@ -892,7 +894,7 @@ check_smartcard_driver_existance(){
 	print_debug "search for driver name existance"
 	if ! echo "$LIST_DRIVER" | grep $DRIVER > /dev/null
 	then
-		print_error "driver name $DRIVER not found" 
+		print_error "driver name $DRIVER not found"
 		return 1
 	else
 		print_debug "driver $DRIVER found"
@@ -1024,7 +1026,7 @@ install_driver(){
 
 	# ottengo il nome del modulo del driver
 	check_smartcard_driver_existance "$DRIVER_NAME" || return 1
-	
+
 	# ottengo l'architettura
 	ARCHITECTURE=$(get_architecture) || return 1
 	# ottengo la path dove sara' possibile installare le libreria
@@ -1091,7 +1093,7 @@ do
 			CONFIG_FILE="$2"
 			shift
 			;;
-		--list-driver)
+		-l|--list-driver)
 			list_driver || exit 1
 			;;
 		--install-driver)
