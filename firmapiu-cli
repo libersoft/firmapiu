@@ -37,7 +37,7 @@ print_usage() {
 	echo "                 Visualizza l'help"
 	echo "  -d, --debug"
 	echo "                 Mostra piu' output, utile per il debug del programma"
-	echo "  --download-driver drivername"
+	echo "  --install-driver drivername"
 	echo "                 Scarica il driver da internet (deve essere eseguito come superuser o root)"
 	echo "  -l, --list-driver"
 	echo "                 lista i possibili driver che si possono installare"
@@ -989,6 +989,7 @@ install_driver_launcher(){
 					print_error "fallimento installazione $FILE"
 					return 1
 				else
+					print_debug "$FILE installed succesfull"
 					let "NUM_INSTALLED_FILE++"
 				fi
 			done
@@ -1001,6 +1002,7 @@ install_driver_launcher(){
 				return 1
 			fi
 
+			print_debug "archive $ARCHIVE extracted succesful"
 			let "NUM_ARCHIVE_EXTRACTED++"
 
 		fi

@@ -69,11 +69,11 @@ cardos_install_driver(){
 				return 0
 				;;
 		"usr/local/lib/libgmp.so.3")
-				install "$FILE" "$LIB_PATH" || return 1
+				ln -s "${LIB_PATH}/libgmp.so.3.4.2" ${LIB_PATH}/$(basename "$FILE") || return 1
 				return 0
 				;;
 		"usr/local/lib/libgmp.so")
-				install "$FILE" "$LIB_PATH" || return 1
+				ln -s "${LIB_PATH}/libgmp.so.3.4.2" ${LIB_PATH}/$(basename "$FILE") || return 1
 				return 0
 				;;
 		"usr/local/lib/libces.so.1.1.5")
@@ -81,11 +81,11 @@ cardos_install_driver(){
 				return 0
 				;;
 		"usr/local/lib/libces.so.1")
-				cp "$FILE" "$LIB_PATH" || return 1
+				ln -s "${LIB_PATH}/libces.so.2.1.5" ${LIB_PATH}/$(basename "$FILE") || return 1
 				return 0
 				;;
 		"usr/local/lib/libces.so")
-				cp "$FILE" "$LIB_PATH" || return 1
+				ln -s "${LIB_PATH}/libces.so.1.1.5" ${LIB_PATH}/$(basename "$FILE") || return 1
 				return 0
 				;;
 		"usr/local/lib/libsiecacrd.so")
