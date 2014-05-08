@@ -8,7 +8,6 @@ config.pyc
 configurazioni-repository
 curl.log
 DriverLettori
-dumpasn1
 dumpasn1.c
 dumpasn1.cfg
 dump_object1.txt
@@ -28,7 +27,6 @@ libraries.xml
 prova_curl
 prova-directory
 provaopenssl
-provapkcs11
 prova.sh
 prova.sh.tsq
 prova.sh.tsq.samuel
@@ -46,3 +44,6 @@ signature.xml
 xmldsig-core-schema.xsd
 .firmapiurc
 .idea
+dumpasn1-i386
+dumpasn1-x86_64
+python_cert.der
