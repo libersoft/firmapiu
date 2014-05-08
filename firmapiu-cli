@@ -323,6 +323,24 @@ execute_command_to_list(){
 	done
 }
 
+dump_smartcard_object(){
+	print_debug "dump object in smartcard"
+
+	if ! check_variable LIBRARY_PATH > /dev/null
+	then
+		# Ottengo il path della libreria del lettore
+		ATR=$(get_atr) || return 1
+		LIBRARY_PATH=$(get_library_path "$ATR") || return 1
+	fi
+	print_debug "use LIBRARY_PATH=$LIBRARY_PATH"
+	check_file_existance "$LIBRARY_PATH" || return 1
+	export LIBRARY_PATH
+
+	pkcs11-tool --module $LIBRARY_PATH --list-objects
+
+	return 0
+}
+
 # Ottengo il certificato dalla smartcard
 # restituisce il path del file contenente il certificate pem della smartcard
 get_pem_certificate(){
@@ -1144,6 +1162,10 @@ do
 			load_config || exit 1
 			verify $@ || exit 1
 			shift "$#" # per non fare ciclare sui file che ho esaminato
+			;;
+		--dump-smartcard-object)
+			load_config || exit 1
+			dump_smartcard_object || exit 1
 			;;
 		-r|--remaning-sign)
 			load_config || exit 1
