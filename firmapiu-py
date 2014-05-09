@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+# sudo apt-get install python-pyasn1 python-pyasn1-modules python-pyscard python-rfc3161 python-pip python-m2crypto
+# sudo pip install rfc3161
+
 import os
 import sys
 import commands  # per usare al momento comandi bash
