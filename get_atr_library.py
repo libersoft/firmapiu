@@ -1,7 +1,8 @@
 import os
 import sys
 import libxml2
-from smartcard import System, Exceptions
+import logging
+from smartcard import System, Exceptions  # sudo apt-get install python-pyscard
 from smartcard.pcsc import PCSCExceptions
 from smartcard.util import toHexString
 
@@ -11,11 +12,13 @@ def check_pcscd_running():
     return the status of pcscd daemon
     :rtype : bool
     """
+    logging.debug("check for pcscd daemon running")
     pcscd_pid_file = "/var/run/pcscd/pcscd.pid"
     if os.path.exists(pcscd_pid_file):
         return True
     else:
         return False
+
 
 def get_smartcard_atr():
     """
@@ -81,7 +84,7 @@ def main():
 
     str_lib, err_str = get_smartcard_library(str_atr)
     if not str_lib:
-        sys.stderr.write(err_str)
+        logging.error(err_str)
         return 1
 
     print(str_lib)

@@ -354,24 +354,9 @@ get_pem_certificate(){
 	ID_INT="0"
 	FOUND=""
 
-#	while [ -z "$FOUND" ]
-#	do
-#		ID_CERT="4453${ID_HEX}"
-#		print_debug "trying with certificate DS${ID_INT} id $ID_CERT"
-#		# se assgeno l'output a una variabile non funziona"
-#		# TODO da mettere il certificato in un file temporaneo
-#		if pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
-#		then
-#			print_debug "find DS${ID_INT} certificate"
-#			FOUND="1"
-#		else
-#			print_debug "DS${ID_INT} non found"
-#		fi
-#		let "ID_HEX++"
-#		let "ID_INT++"
-#	done
-	ID_CERT="445330"
-	pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
+	#ID_CERT="445330"
+	#pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
+	/usr/share/firmapiu/library/SmartcardFetcher.py # uso il mio programma python
 
 	PEM_CERT_FILE=$(create_temp_file) || return 1
 

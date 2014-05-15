@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
-import PyKCS11
+import PyKCS11  # sudo apt-get install python-pykcs11
 import sys
+import logging
 
 
 # def dump(src, length=8):
@@ -47,7 +48,7 @@ class GetInfo(object):
 
         # se non sono presenti token
         if not len(objects):
-            sys.stderr.write("nessun token trovato")
+            logging.error("nessun token trovato")
             return False
 
         for obj in objects:
@@ -70,23 +71,29 @@ class GetInfo(object):
 
         return True
 
-# se non sono stati passati argomenti
-if len(sys.argv) == 1:
-    library = "/usr/local/lib/libbit4ipki.so"
-else:  # il primo ergomento passato e' la libreria
-    library = sys.argv[1]
 
-info = GetInfo(library)
-# ottengo la lista degli slot per la smartcard
-slot_list = info.get_slot_list()
+def main():
+    # se non sono stati passati argomenti
+    if len(sys.argv) == 1:
+        logging.error("no library passed")
+        return 1
 
-# se non ci sono slot inserite
-if not len(slot_list):
-    sys.exit(1)
-else:  # di default uso la prima
-    slot_use = slot_list[0]
+    library = sys.argv[1]  # la libreria e' il primo parametro passato
+    info = GetInfo(library)  # creo la classe per ottenere le info sulla smartcard
+    slot_list = info.get_slot_list()  # ottengo la lista degli slot per la smartcard
 
-if info.dump_ds_certificate(slot_use):
-    sys.exit(0)
-else:
-    sys.exit(1)
+    if not len(slot_list):  # se non ci sono slot inserite
+        logging.error("no slot found")
+        return 1
+    else:  # di default uso la prima
+        slot_use = slot_list[0]
+
+    if info.dump_ds_certificate(slot_use):
+        logging.debug("dump del certificato riuscito")
+        return 0
+    else:
+        logging.error("dump del certificato non riuscito")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

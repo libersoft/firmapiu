@@ -1,0 +1,158 @@
+#!/usr/bin/python2
+import commands
+import time
+from threading import Thread
+from gi.repository import Gtk
+
+
+class ExecuteThread(Thread):
+    def __init__(self, window, cmd_desc, cmd):
+        Thread.__init__(self)
+        self.window = window
+        self.cmd_desc = cmd_desc
+        self.cmd = cmd
+
+    def run(self):
+        self.window.write_log(self.cmd_desc)
+        status, output = commands.getstatusoutput(self.cmd)
+        self.window.write_log(output)
+        self.window.write_log("All Done")
+
+
+class FirmapiuWindow(Gtk.Window):
+    def __init__(self):
+        Gtk.Window.__init__(self)
+        self.icon_dir = "icons/"
+        self.connect("delete-event", Gtk.main_quit)
+
+        self.button_grid = Gtk.Grid()
+        self.add(self.button_grid)
+
+        self.bottone_firma = Gtk.Button()
+        image_bottone_firma = Gtk.Image()
+        image_bottone_firma.set_from_file(self.icon_dir + 'firma96x96.png')
+        image_bottone_firma.show()
+        self.bottone_firma.add(image_bottone_firma)
+        self.bottone_firma.connect("clicked", self.firma)
+
+        self.bottone_verifica = Gtk.Button()
+        image_bottone_verifica = Gtk.Image()
+        image_bottone_verifica.set_from_file(self.icon_dir + "verifica96x96.png")
+        image_bottone_verifica.show()
+        self.bottone_verifica.add(image_bottone_verifica)
+        self.bottone_verifica.connect("clicked", self.verificat)
+
+        self.bottone_timestamp = Gtk.Button()
+        image_bottone_timestamp = Gtk.Image()
+        image_bottone_timestamp.set_from_file(self.icon_dir + "datacarta96x96.png")
+        image_bottone_timestamp.show()
+        self.bottone_timestamp.add(image_bottone_timestamp)
+        self.bottone_timestamp.connect("clicked", self.timestamp)
+
+        self.bottone_impostazioni = Gtk.Button()
+        image_bottone_impostazioni = Gtk.Image()
+        image_bottone_impostazioni.set_from_file(self.icon_dir + "impostazioni96x96.png")
+        image_bottone_impostazioni.show()
+        self.bottone_impostazioni.add(image_bottone_impostazioni)
+        self.bottone_impostazioni.connect("clicked", self.impostazioni)
+
+        self.bottone_impostazioni_avanzate = Gtk.Button()
+        image_bottone_impostazioni_avanzate = Gtk.Image()
+        image_bottone_impostazioni_avanzate.set_from_file(self.icon_dir + "avanzate96x96.png")
+        image_bottone_impostazioni_avanzate.show()
+        self.bottone_impostazioni_avanzate.add(image_bottone_impostazioni_avanzate)
+        self.bottone_impostazioni_avanzate.connect("clicked", self.impostazioni_avanzate)
+
+        self.bottone_esci = Gtk.Button()
+        image_bottone_esci = Gtk.Image()
+        image_bottone_esci.set_from_file(self.icon_dir + "tango/system-log-out.png")
+        image_bottone_esci.show()
+        self.bottone_esci.add(image_bottone_esci)
+        self.bottone_esci.connect("clicked", self.esci)
+
+        self.label_drag_drop = Gtk.Label("-> Trascina un file o cartella qui <-")
+        self.label_drag_drop.set_padding(40, 40)
+        self.label_drag_drop.show()
+
+        self.log_view = Gtk.TextView()
+        self.log_buffer = self.log_view.get_buffer()
+        self.log_buffer.set_modified(False)
+        self.log_view.show()
+        self.write_log("finestra di log del programma")
+
+        self.button_grid.attach(self.bottone_firma, 1, 0, 1, 1)
+        self.button_grid.attach(self.bottone_verifica, 2, 0, 1, 1)
+        self.button_grid.attach(self.bottone_timestamp, 3, 0, 1, 1)
+        self.button_grid.attach(self.bottone_impostazioni, 1, 1, 1, 1)
+        self.button_grid.attach(self.bottone_impostazioni_avanzate, 2, 1, 1, 1)
+        self.button_grid.attach(self.bottone_esci, 3, 1, 1, 1)
+        self.button_grid.attach(self.label_drag_drop, 1, 2, 3, 1)
+        self.button_grid.attach(self.log_view, 1, 3, 3, 1)
+
+    def write_log(self, text_to_insert):
+        assert isinstance(text_to_insert, str)
+        self.log_buffer.insert(self.log_buffer.get_end_iter(), "%s\n" % text_to_insert)
+
+    def launch_choose_window(self):
+        dialog = Gtk.FileChooserDialog("Scegli il file da firmare", self, Gtk.FileChooserAction.OPEN,
+                                       (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                        Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
+        self.add_filters(dialog)
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            choise = dialog.get_filename()
+        elif response == Gtk.ResponseType.CANCEL:
+            choise = None
+        dialog.destroy()
+
+        return choise
+
+    def execute_command_thread(self, cmd_desc, cmd):
+        ExecuteThread(self, cmd_desc, cmd).start()
+
+    def add_filters(self, dialog):
+        # filter_text = Gtk.FileFilter()
+        # filter_text.set_name("Text files")
+        # filter_text.add_mime_type("text/plain")
+        # dialog.add_filter(filter_text)
+        #
+        # filter_py = Gtk.FileFilter()
+        # filter_py.set_name("Python files")
+        # filter_py.add_mime_type("text/x-python")
+        # dialog.add_filter(filter_py)
+
+        filter_any = Gtk.FileFilter()
+        filter_any.set_name("Any files")
+        filter_any.add_pattern("*")
+        dialog.add_filter(filter_any)
+
+    def firma(self, widget):
+        file_choose = self.launch_choose_window()
+        if file_choose is not None:
+            self.execute_command_thread("signing file %s" % file_choose,
+                                        "firmapiu-cli --disable-timestamp-request --disable-sign --sign %s" % file_choose)
+
+    def verificat(self, widget):
+        self.write_log("verifica pressed")
+
+    def timestamp(self, widget):
+        self.write_log("timestamp pressed")
+
+    def impostazioni(self, widget):
+        self.write_log("impostazioni pressed")
+
+    def impostazioni_avanzate(self, widget):
+        self.write_log("avanzate pressed")
+
+    def esci(self, widget):
+        self.write_log("esci pressed")
+
+
+def main():
+    win = FirmapiuWindow()
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
