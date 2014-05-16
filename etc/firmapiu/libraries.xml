@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<libraries>
+	<library path="/usr/local/lib/libaseCnsP11.so">
+		<key>3b:df:00:00:81:31:fe:00:00:6b:00:0c:00:00:01:00:01:43:4e:53:10:31:80:00</key>
+		<key>4b:df:18:00:81:31:fe:7d:00:6b:15:0c:01:81:01:11:01:43:4e:53:10:31:80:e8</key>
+	</library>
+	<library path="/usr/local/lib/libbit4ipki.so">
+		<key>3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:11:01:43:4e:53:11:31:80:8e</key>
+		<key>3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:00:01:43:4e:53:00:31:80:00</key>
+		<key>3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:03:03:01:01:01:43:4e:53:10:31:80:9d</key>
+	</library>
+</libraries>
+

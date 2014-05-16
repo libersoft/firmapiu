@@ -1,0 +1,11 @@
+##############################
+#### Default config file #####
+##############################
+ENGINE_PATH="/usr/lib/engines/engine_pkcs11.so"
+LIBRARY_PATH=""
+TSA_SERVER="https://servizi.arubapec.it/tsa/ngrequest.php"
+TSA_USERNAME=""
+TSA_PASSWORD=""
+SMARTCARD_PIN=""
+SMARTCARD_PUK=""
+
