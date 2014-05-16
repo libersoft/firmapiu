@@ -17,7 +17,6 @@ filename.errato
 filename.giusto
 FileProtector
 firma.odt
-firmapiu
 firmapiu.cfg
 firme-esaurite.tsr
 prova_curl
@@ -43,3 +42,4 @@ xmldsig-core-schema.xsd
 dumpasn1-i386
 dumpasn1-x86_64
 python_cert.der
+firmapiu-fortunato

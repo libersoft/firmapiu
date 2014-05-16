@@ -28,7 +28,8 @@
 # -- TSA_PASSWORD password del server tsa
 
 # path dove verranno messi i moduli
-MODULES_PATH="./modules"
+FIRMAPIU_PATH="${PWD}/.."
+MODULES_PATH="${FIRMAPIU_PATH}/usr/share/firmapiu/modules"
 
 print_usage() {
 	echo "Uso: firmapiu-cli [OPTION]... file"
