@@ -1,61 +1,79 @@
-#!/usr/bin/python2
+#!/usr/bin/python
+import os
+import sys
 import logging
+#import StringIO
 import smartcard
 import PyKCS11
 import libxml2
-import sys
+#from M2Crypto import X509
 from smartcard.util import toHexString
+
+class NoSlotFoundException(Exception):
+    pass
+
+
+class NoTokenFoundException(Exception):
+    pass
+
+
+class NoDigitalSignaturaFoundException(Exception):
+    pass
 
 
 class SmartcardFetcher(object):
-    def __init__(self, library_path):
+    def __init__(self, library_path, slot_use=-1):
         self.library_path = library_path
         self.pkcs11_obj = PyKCS11.PyKCS11Lib()
         self.pkcs11_obj.load(self.library_path)
+        if slot_use == -1 :
+            self.slot_use = self.__get_default_slot()
+        else:
+            self.slot_use = slot_use
 
-    def get_slot_list(self):
-        return self.pkcs11_obj.getSlotList()
+    def __get_default_slot(self):
+        slots = self.pkcs11_obj.getSlotList()
+        
+        if not len(slots):
+            raise NoSlotFoundException()
 
-    def get_slot_info(self, slot):
-        assert isinstance(slot, int)
-        return self.pkcs11_obj.getSlotInfo(slot)
+        return slots[0]  # di default uso la prima slot
 
-    def get_token_info(self, slot):
-        assert isinstance(slot, int)
-        return self.pkcs11_obj.getTokenInfo(slot)
+    def get_ds_id(self):
+        session = self.pkcs11_obj.openSession(self.slot_use)
+        cert_objects = session.findObjects( template=( 
+                (PyKCS11.CKA_CLASS, PyKCS11.CKO_CERTIFICATE), 
+                (PyKCS11.CKA_CERTIFICATE_TYPE, PyKCS11.CKC_X_509),
+                (PyKCS11.CKA_TOKEN, True),
+                (PyKCS11.CKA_TRUSTED, True)
+            )
+        )  # ottengo i token di tipo certificato della smartcard
 
-    def dump_ds_certificate(self, slot, outfile):
-        assert isinstance(slot, int)
-        assert isinstance(outfile, str)
+        cert_objects_len = len(cert_objects)
 
-        session = self.pkcs11_obj.openSession(slot)
-        all_attributes = PyKCS11.CKA.keys()  # tutti gli attrivuti possibili per i token
-        all_attributes = [e for e in all_attributes if isinstance(e, int)]
-        objects = session.findObjects()  # ottengo i token della smartcard
+        if not cert_objects_len:  # se non ho trovato certificati
+            logging.error("no token found into smartcard")
+            raise NoTokenFoundException()
 
-        if not len(objects):  # se non sono presenti token
-            logging.error("nessun token trovato")
-            return False
+        ds_id = None
+        # cerco nei certificati CKO_CERTIFICATE quelli che contengono DS
+        for cert_obj in cert_objects:
+            attrs = session.getAttributeValue(cert_obj, (PyKCS11.CKA_LABEL,PyKCS11.CKA_ID))
+            if "DS" in attrs[0]:
+                ds_id = ''.join([hex(elem)[2:] for elem in attrs[1]])
+                # ds_id = ''.join([chr(elem) for elem in attr[1]])
+                # value = attr_dict[PyKCS11.CKA_VALUE]  # ottengo una tupla contenente il DER della smartcard
 
-        for obj in objects:
-            attributes = session.getAttributeValue(obj, all_attributes)
-            attr_dict = dict(zip(all_attributes, attributes))
+        if ds_id is None:
+            logging.error("no DS signature found")
+            raise NoDigitalSignaturaFoundException()
 
-            # cerco nei certificati CKO_CERTIFICATE quelli che contengono DS
-            if attr_dict[PyKCS11.CKA_CLASS] == PyKCS11.CKO_CERTIFICATE and \
-                    attr_dict[PyKCS11.CKA_TRUSTED] and \
-                    attr_dict[PyKCS11.CKA_TOKEN] and \
-                    attr_dict[PyKCS11.CKA_CERTIFICATE_TYPE] == PyKCS11.CKC_X_509 and \
-                    "DS" in str(attr_dict[PyKCS11.CKA_LABEL]):
-                # print attr_dict[PyKCS11.CKA_ID]
-                # faccio un dump della sessione
-                value = attr_dict[PyKCS11.CKA_VALUE]
-                cert_file = open(outfile, "wb")
-                for unicode_val in value:
-                    cert_file.write(chr(unicode_val))
-                cert_file.close()
+        return ds_id
 
-        return True
+#        buffer_der = StringIO.StringIO()  # creo un buffer per contenere il certificato in formato DER
+#        for unicode_val in value:
+#            buffer_der.write(chr(unicode_val))
+#        return buffer_der.getvalue()
 
 
 def get_smartcard_atr():
@@ -88,18 +106,21 @@ def get_smartcard_atr():
 
 def get_smartcard_library(atr):
     """in base all'atr restituisco quale libreria e' utile usare"""
+    if not os.path.exists("libraries.xml"):
+        logging.error("no library xml found")
+        return None
 
     doc = libxml2.parseFile("libraries.xml")  # carico il file xml con le librerie e cerco la libreria relativa all'ATR
     library_result = doc.xpathEval("//key[text()='%s']/../@path" % atr)  # in base all'atr cerco nel file usando XPATH
     if len(library_result) == 0:  # se non trovo nessun risultato
-        logging.error("non ho trovato nessuna libreria")
+        logging.error("no library found")
         return None
 
     library_used = library_result[0].get_content()  # ottengo il path della libreria
     return library_used
 
 
-def dump_certificate(filename="certificate.der"):
+def dump_digital_signature_id():
     atr = get_smartcard_atr()  # ottengo l'atr della smartcard
     if atr is None:
         return 1
@@ -109,24 +130,19 @@ def dump_certificate(filename="certificate.der"):
         return 1
 
     fetcher = SmartcardFetcher(library)  # creo la classe per ottenere le info sulla smartcard
-    slot_list = fetcher.get_slot_list()  # ottengo la lista degli slot per la smartcard
-
-    logging.debug("test number of slot found")
-    if not len(slot_list):  # se non ci sono slot inserite
-        logging.error("no slot found")
-        return 1
-    else:  # di default uso la prima
-        slot_use = slot_list[0]
-
-    if fetcher.dump_ds_certificate(slot_use, filename):
-        logging.debug("dump del certificato riuscito")
-        return 0
-    else:
-        logging.error("dump del certificato non riuscito")
-        return 1
+    print fetcher.get_ds_id()
+    
+    return 0
+    # ottengo il buffer in formato DER
+#    buffer_certificate_der = fetcher.dump_ds_der_certificate(slot_use)
+#    if buffer_certificate_der is None:
+#        return 1
+#
+#    # salvo il certificato in formato PEM
+#    x509_obj = X509.load_cert_string(buffer_certificate_der, X509.FORMAT_DER)
+#    if not x509_obj.save_pem(filename):
+#        logging.error("unable to save PEM certificate")
+#        return 1
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        sys.exit(dump_certificate(sys.argv[1]))
-    else:
-        sys.exit(dump_certificate())
+    sys.exit(dump_digital_signature_id())

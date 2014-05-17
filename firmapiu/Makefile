@@ -13,6 +13,7 @@ SHARE_DIR = $(DESTDIR)/usr/share/firmapiu
 
 MODULES_DIR = $(SHARE_DIR)/modules
 LIBRARY_DIR = $(SHARE_DIR)/library
+ICONS_DIR = $(SHARE_DIR)/icons
 
 EXE_CLI = firmapiu-cli
 EXE_PY = firmapiu-py
@@ -31,6 +32,10 @@ install:
 	install bin/$(EXE_CLI) $(BIN_DIR)
 	install bin/$(EXE_GUI) $(BIN_DIR)
 	install bin/$(EXE_PY) $(BIN_DIR)
+	# install icons
+	install -d $(ICONS_DIR) $(ICONS_DIR)/tango
+	install -m644 usr/share/firmapiu/icons/*.png $(ICONS_DIR)
+	install -m644 usr/share/firmapiu/icons/tango/*.png $(ICONS_DIR)/tango
 	# install library and config file
 	install usr/share/firmapiu/modules/*.sh $(MODULES_DIR)
 	install usr/share/firmapiu/library/*.py $(LIBRARY_DIR)

@@ -1,5 +1,4 @@
-__author__ = 'samuel'
-
+#!/usr/bin/python
 import os
 import sys
 import pycurl

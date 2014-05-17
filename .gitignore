@@ -1,3 +1,4 @@
+*.pyc
 affinity
 aggiungi-repository
 certificate.der
@@ -43,3 +44,4 @@ dumpasn1-i386
 dumpasn1-x86_64
 python_cert.der
 firmapiu-fortunato
+firmapiu.tar.gz
