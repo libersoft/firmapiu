@@ -1,13 +1,14 @@
 #!/usr/bin/python
 import os
 import sys
-import logging
 #import StringIO
 import smartcard
 import PyKCS11
 import libxml2
 #from M2Crypto import X509
 from smartcard.util import toHexString
+import MyLogger
+import ConfigProvider
 
 class NoSlotFoundException(Exception):
     pass
@@ -22,8 +23,9 @@ class NoDigitalSignaturaFoundException(Exception):
 
 
 class SmartcardFetcher(object):
-    def __init__(self, library_path, slot_use=-1):
+    def __init__(self, library_path, logger=None, slot_use=-1):
         self.library_path = library_path
+        self.logger = logger  # il logger deve essere un istanza di MyLogger.Logger va controllato
         self.pkcs11_obj = PyKCS11.PyKCS11Lib()
         self.pkcs11_obj.load(self.library_path)
         if slot_use == -1 :
@@ -33,7 +35,7 @@ class SmartcardFetcher(object):
 
     def __get_default_slot(self):
         slots = self.pkcs11_obj.getSlotList()
-        
+
         if not len(slots):
             raise NoSlotFoundException()
 
@@ -41,8 +43,8 @@ class SmartcardFetcher(object):
 
     def get_ds_id(self):
         session = self.pkcs11_obj.openSession(self.slot_use)
-        cert_objects = session.findObjects( template=( 
-                (PyKCS11.CKA_CLASS, PyKCS11.CKO_CERTIFICATE), 
+        cert_objects = session.findObjects( template=(
+                (PyKCS11.CKA_CLASS, PyKCS11.CKO_CERTIFICATE),
                 (PyKCS11.CKA_CERTIFICATE_TYPE, PyKCS11.CKC_X_509),
                 (PyKCS11.CKA_TOKEN, True),
                 (PyKCS11.CKA_TRUSTED, True)
@@ -52,7 +54,7 @@ class SmartcardFetcher(object):
         cert_objects_len = len(cert_objects)
 
         if not cert_objects_len:  # se non ho trovato certificati
-            logging.error("no token found into smartcard")
+            self.logger.write(MyLogger.ERROR, "no token found into smartcard")
             raise NoTokenFoundException()
 
         ds_id = None
@@ -65,7 +67,7 @@ class SmartcardFetcher(object):
                 # value = attr_dict[PyKCS11.CKA_VALUE]  # ottengo una tupla contenente il DER della smartcard
 
         if ds_id is None:
-            logging.error("no DS signature found")
+            self.logger.write(MyLogger.ERROR, "no DS signature found")
             raise NoDigitalSignaturaFoundException()
 
         return ds_id
@@ -76,18 +78,18 @@ class SmartcardFetcher(object):
 #        return buffer_der.getvalue()
 
 
-def get_smartcard_atr():
+def get_smartcard_atr(logger=None):
     """return the atr of the current device"""
 
     try:
         readers_list = smartcard.System.readers()  # ottengo la lista dei lettori
     except smartcard.pcsc.PCSCExceptions.EstablishContextException:
-        logging.error("demone pcscd not attivo")  # il lettore di smartcard potrebbe non essere inserito
+        logger.write(MyLogger.ERROR, "demone pcscd not attivo")  # il lettore di smartcard potrebbe non essere inserito
         return None
 
     # non sono riuscito a trovare nessun lettore
     if len(readers_list) == 0:
-        logging.error("nessun lettore riconosciuto")
+        logger.write(MyLogger.ERROR, "nessun lettore riconosciuto")
         return None
 
     reader = readers_list[0]  # di default prendo il primo lettore
@@ -98,22 +100,29 @@ def get_smartcard_atr():
         atr_str = toHexString(connection.getATR()).replace(" ", ":").lower()
         connection.disconnect()
     except smartcard.Exceptions.CardConnectionException, errmsg:
-        logging.error(errmsg)
+        logger.error(errmsg)
         return None
 
     return atr_str
 
 
-def get_smartcard_library(atr):
+def get_smartcard_library(atr, logger=None):
     """in base all'atr restituisco quale libreria e' utile usare"""
-    if not os.path.exists("libraries.xml"):
-        logging.error("no library xml found")
+    config = ConfigProvider.ConfigStaticLoader()
+    smartcard_lib = config.get_smartcard_library_path()
+
+    if smartcard_lib is None:
+        logger.error("smartcard library not set in config")
         return None
 
-    doc = libxml2.parseFile("libraries.xml")  # carico il file xml con le librerie e cerco la libreria relativa all'ATR
+    if not os.path.exists(smartcard_lib):
+        logger.error("no library xml found")
+        return None
+
+    doc = libxml2.parseFile(smartcard_lib)  # carico il file xml con le librerie e cerco la libreria relativa all'ATR
     library_result = doc.xpathEval("//key[text()='%s']/../@path" % atr)  # in base all'atr cerco nel file usando XPATH
     if len(library_result) == 0:  # se non trovo nessun risultato
-        logging.error("no library found")
+        logger.write(MyLogger.ERROR, "no library found")
         return None
 
     library_used = library_result[0].get_content()  # ottengo il path della libreria
@@ -131,7 +140,7 @@ def dump_digital_signature_id():
 
     fetcher = SmartcardFetcher(library)  # creo la classe per ottenere le info sulla smartcard
     print fetcher.get_ds_id()
-    
+
     return 0
     # ottengo il buffer in formato DER
 #    buffer_certificate_der = fetcher.dump_ds_der_certificate(slot_use)

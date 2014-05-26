@@ -5,31 +5,27 @@ import rfc3161
 from pyasn1_modules import rfc2459
 from pyasn1.type import univ
 from pyasn1.codec.der import encoder
-
-class TSAClient(object):
-    def __init__(self):
-        pass
+import WebRequest
+import ConfigProvider
 
 
-def create_timestamp_query(filename):
-    if not os.path.exists(filename):
-        return None, 'file non esistente'
+def create_timestamp_query(filename, logger=None):
+    if not os.access(filename, os.R_OK):
+        logger.error('Non file %s found' % filename)
+        return None
 
-    if not os.path.isfile(filename):
-        return None, 'not a file'
-
-    # calcolo l'hash 256 de file
     try:
-        file_hash = open(filename, "rb")
+        file_hash = open(filename, 'rb')
         hash_obj = hashlib.sha256()
         hash_obj.update(file_hash.read())
         digest = hash_obj.digest()
     except:
-        return None, 'failed to hash file'  # TODO da riverede la gestione delle eccezioni
+        logger.error('not hash generate')
+        return None
 
-    # costruisce l'oggetto richiesta
+    # costruisce la richiesta
     algorithm_identifier = rfc2459.AlgorithmIdentifier()
-    algorithm_identifier.setComponentByPosition(0, rfc3161.__dict__["id_sha256"])
+    algorithm_identifier.setComponentByPosition(0, rfc3161.__dict__['id_sha256'])
     algorithm_identifier.setComponentByPosition(1, univ.Null())  # serve per Aruba
     message_imprint = rfc3161.MessageImprint()
     message_imprint.setComponentByPosition(0, algorithm_identifier)
@@ -41,6 +37,10 @@ def create_timestamp_query(filename):
     # codifico tutto in DER
     binary_request = encoder.encode(request)
 
-    return binary_request, ""
+    return binary_request
 
+
+def send_timestamp_query(logger=None):
+    web = WebRequest("https://servizi.arubapec.it/tsa/ngrequest.php", logger)
+    web.request()
 

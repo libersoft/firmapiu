@@ -21,12 +21,13 @@ from pyasn1_modules import rfc2459
 from pyasn1.type import univ
 import pycurl
 import StringIO
-import config
+#import config
 
 
 def parse_argument():
     parser = ArgumentParser()
-    parser.add_argument('--foo', help='foo help')
+    parser.add_argument('--sign', help='Sign given filename')
+    parser.add_argument('--verify', help='Verify given filename')
     result = parser.parse_args()
 
 
@@ -341,10 +342,7 @@ def web_request(site_url, data=None, file_to_send=None, http_username=None,
 
 
 def main():
-    atr, err_msg = get_smartcard_atr()
-    lib, err_msg = get_smartcard_library(atr)
-    print get_serial(lib)
-
+    parse_argument()
 
 if __name__ == '__main__':
     main()

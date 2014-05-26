@@ -1,8 +1,14 @@
 #!/usr/bin/python
+import sys
 import commands
-import time
 from threading import Thread
 from gi.repository import Gtk
+
+sys.path.append('../usr/share/firmapiu/library')
+import SmartcardFetcher
+import SignProvider
+import MyLogger
+import ConfigProvider
 
 
 class ExecuteThread(Thread):
@@ -22,6 +28,9 @@ class ExecuteThread(Thread):
 class FirmapiuWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self)
+
+        self.logger = MyLogger.Logger(self.write_log)
+
         self.icon_dir = "../usr/share/firmapiu/icons/"
         self.connect("delete-event", Gtk.main_quit)
 
@@ -40,14 +49,14 @@ class FirmapiuWindow(Gtk.Window):
         image_bottone_verifica.set_from_file(self.icon_dir + "verifica96x96.png")
         image_bottone_verifica.show()
         self.bottone_verifica.add(image_bottone_verifica)
-        self.bottone_verifica.connect("clicked", self.verificat)
-        
-	self.bottone_verifica = Gtk.Button()
+        self.bottone_verifica.connect("clicked", self.verifica)
+
+        self.bottone_verifica = Gtk.Button()
         image_bottone_verifica = Gtk.Image()
         image_bottone_verifica.set_from_file(self.icon_dir + "verifica96x96.png")
         image_bottone_verifica.show()
         self.bottone_verifica.add(image_bottone_verifica)
-        self.bottone_verifica.connect("clicked", self.verificat)
+        self.bottone_verifica.connect("clicked", self.verifica)
 
         self.bottone_timestamp = Gtk.Button()
         image_bottone_timestamp = Gtk.Image()
@@ -85,7 +94,7 @@ class FirmapiuWindow(Gtk.Window):
         self.log_buffer = self.log_view.get_buffer()
         self.log_buffer.set_modified(False)
         self.log_view.show()
-        self.write_log("finestra di log del programma")
+        self.logger.write(None, "finestra di log del programma")
 
         self.button_grid.attach(self.bottone_firma, 1, 0, 1, 1)
         self.button_grid.attach(self.bottone_verifica, 2, 0, 1, 1)
@@ -96,7 +105,8 @@ class FirmapiuWindow(Gtk.Window):
         self.button_grid.attach(self.label_drag_drop, 1, 2, 3, 1)
         self.button_grid.attach(self.log_view, 1, 3, 3, 1)
 
-    def write_log(self, text_to_insert):
+    # Funzione che verra chiamata dall'handler ogni volta che ci saranno dei da inserire dei messaggi
+    def write_log(self, type, text_to_insert):
         assert isinstance(text_to_insert, str)
         self.log_buffer.insert(self.log_buffer.get_end_iter(), "%s\n" % text_to_insert)
 
@@ -135,12 +145,41 @@ class FirmapiuWindow(Gtk.Window):
 
     def firma(self, widget):
         file_choose = self.launch_choose_window()
-        if file_choose is not None:
-            self.execute_command_thread("signing file %s" % file_choose,
-                                        "firmapiu-cli --disable-timestamp-request --disable-sign --sign %s" % file_choose)
+        if file_choose is not None:  # se ho scelto il file
+            config = ConfigProvider.ConfigStaticLoader()
+            
+            library = config.get_library_path()
+            if library is None:  # se la libreria non e' stata settata nei file di configurazione
+                atr = SmartcardFetcher.get_smartcard_atr(self.logger)  # ottengo l'atr dalla smartcard
+                if atr is None:
+                    return
+                library = SmartcardFetcher.get_smartcard_library(atr, self.logger)  # ottengo la libreria dall'atr
+                if library is None:
+                    return
+            
+            # firmo il file con il certificato della smartcard
+            pin = config.get_smartcard_pin()
+            if pin is None:
+                return
+            
+            SignProvider.sign_file_with_ds_certificate(library, pin, file_choose, self.logger)
 
-    def verificat(self, widget):
-        self.write_log("verifica pressed")
+    def verifica(self, widget):
+        file_choose = self.launch_choose_window()  # scelgo il file da verificare
+        if file_choose is not None:
+            config = ConfigProvider.ConfigStaticLoader()
+
+            library = config.get_library_path()
+            if library is None:  # se la libreria non e' stata settata nei file di configurazione
+                atr = SmartcardFetcher.get_smartcard_atr(self.logger)  # ottengo l'atr dalla smartcard
+                if atr is None:
+                    return
+                library = SmartcardFetcher.get_smartcard_library(atr, self.logger)  # ottengo la libreria dall'atr
+                if library is None:
+                    return
+
+            p7m_file = '%s.p7m' % file_choose
+            SignProvider.verify_file_with_ds_certificate(library, file_choose, p7m_file, logger=self.logger)
 
     def timestamp(self, widget):
         self.write_log("timestamp pressed")
@@ -152,7 +191,7 @@ class FirmapiuWindow(Gtk.Window):
         self.write_log("avanzate pressed")
 
     def esci(self, widget):
-        self.write_log("esci pressed")
+        Gtk.main_quit()
 
 
 def main():

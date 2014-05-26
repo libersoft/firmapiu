@@ -7,14 +7,15 @@ import logging
 
 
 class WebRequest(object):
-    def __init__(self, url=None):
+    def __init__(self, url, logger=None):
         self.curl_obj = pycurl.Curl()
-        self.url = url
+        self.url = url  # TODO da controllare che venga inserito un url
         self.headers = []
         self.buffer_out = StringIO.StringIO()
         self.file_send = None
         self.file_send_size = 0
         self.file_send_buff = None
+        self.logger = logger
 
     def add_header(self, header_str):
         self.headers.append(header_str)
