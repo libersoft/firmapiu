@@ -1,48 +1,72 @@
 #!/usr/bin/python
 import os
-from M2Crypto import Engine, m2 # sudo apt-get install python-m2crypto
+from M2Crypto import Engine, m2  # sudo apt-get install python-m2crypto
 from M2Crypto import SMIME
 from M2Crypto import X509
 from M2Crypto import BIO
 
 import SmartcardFetcher
-import MyLogger
 # per l'engine installare sudo apt-get install libengine-pkcs11-openssl
 
-class SignProvider(object):
-    def __init__(self, pkcs11_engine='/usr/lib/engines/engine_pkcs11.so', pkcs11_driver=None, pin=None, logger=None):
-        self.logger = logger  # oggetto di tipo MyLogger.Logger da controllare
-        self.pkcs11_engine = pkcs11_engine
-        self.pkcs11_driver = pkcs11_driver
-        if pin is None:  # inserire il pin serve per poter estrapolare il riferimento alla chiave privata
-            self.pin = None
-        else:
-            self.pin = pin
-        self.engine_load = False
 
-    def __load_engine(self):
-        if self.engine_load:  # se l'engine e' gia stato caricato
+class SignProvider(object):
+    def __init__(self, config, logger, fetch_pin=False):
+        if config is None:
+            raise AttributeError
+        if logger is None:
+            raise AttributeError
+        self.config = config  # istanza del file di configurazione
+        self.logger = logger  # oggetto di tipo Logger.Logger da controllare
+        self.must_fetch_pin = fetch_pin
+        self.pkcs11_engine = None
+        self.smartcard_driver_path = None
+        self.engine_driver_path = None
+
+    def load_engine(self):
+        if self.pkcs11_engine is not None:  # se l'engine e' gia stato caricato
             return True
 
-        if Engine.load_dynamic_engine('pkcs11', self.pkcs11_engine) is None:
+        engine_drv_path = self.config.get_engine_driver_path()
+        if engine_drv_path is None:
             return False
 
-        self.logger.debug('create engine using pin:%s' % self.pin)
+        self.engine_driver_path = engine_drv_path
+
+        scard_drv_path = self.config.get_smartcard_driver_path()  # ottengo il path della smartcard dalle config
+        if scard_drv_path is None:  # se non sono riuscito ad ottenere il driver della smartcard
+            scard_atr = SmartcardFetcher.get_smartcard_atr(self.logger)  # ottengo l'atr della smartcard
+            if scard_atr is None:  # se non sono riuscito ad ottenere l'atr
+                return False
+            scard_drv_path = SmartcardFetcher.get_smartcard_library(
+                scard_atr, self.config, self.logger
+            )  # ottengo il path del driver della smarcard
+            if scard_drv_path is None:  # se non sono ancora riuscito ad ottenere il path
+                return False
+
+        self.smartcard_driver_path = scard_drv_path
+
+        if Engine.load_dynamic_engine('pkcs11', self.engine_driver_path) is None:
+            return False
+
         self.pkcs11_engine = Engine.Engine('pkcs11')
-        self.pkcs11_engine.ctrl_cmd_string('MODULE_PATH', self.pkcs11_driver)
-        if self.pin is not None:
-            self.pkcs11_engine.ctrl_cmd_string("PIN", self.pin)  # senza il pin l'engine chiede il pin da prompt
+        self.pkcs11_engine.ctrl_cmd_string('MODULE_PATH', self.smartcard_driver_path)
+
+        if self.must_fetch_pin:  # se e' rischiesto un inserimento del pin
+            pin = self.config.get_smartcard_pin()
+            if pin is None:
+                return False
+            self.logger.debug('create engine using pin:%s' % pin)
+            self.pkcs11_engine.ctrl_cmd_string("PIN", pin)  # senza il pin l'engine chiede il pin da prompt
         # TODO da controllare il login con un pin errate perche' non da' errore
+
         self.pkcs11_engine.init()
-        self.engine_load = True
         return True
 
     def get_ds_private_key(self, ds_id):
+        if not self.load_engine():
+            return None  # nel caso sia fallito il caricamento
 
-        if not self.engine_load and not self.__load_engine():
-            return None
-
-        if self.pin is None:
+        if not self.must_fetch_pin:  # se non ho avuto accesso al pin
             self.logger.error('pin not insert during initialization, I can\'t access to private key')
             return None
         try:
@@ -53,8 +77,8 @@ class SignProvider(object):
             return None
 
     def get_ds_certificate(self, ds_id):
-        if not self.engine_load and not self.__load_engine():
-            return None
+        if not self.load_engine():
+            return None  # nel caso sia fallito il caricamento
 
         try:
             cert = self.pkcs11_engine.load_certificate('slot_0-id_%s' % ds_id)
@@ -63,132 +87,141 @@ class SignProvider(object):
             self.logger.error("no certificate found")
             return None
 
+    def sign_file_with_ds_certificate(self, filename):
+        if not os.access(filename, os.R_OK):  # se riesco a leggere il file da firmare
+            self.logger.error("No file to sign '%s' found" % filename)
+            return None
 
-def sign_file_with_ds_certificate(library, pin, filename, logger=None):
-    if not os.access(filename, os.R_OK):
-        logger.error("No file to sign %s found" % filename)
-        return None
-    if not os.access(library, os.R_OK):
-        logger.error("No library %s file found" % library)
-        return None
+        if not self.load_engine():
+            return None  # nel caso sia fallito il caricamento
 
-    filename_desc = open(filename)
-    input_bio = BIO.File(filename_desc)
+        scard_pin = self.config.get_smartcard_pin()  # ottengo il pin della smartcard
+        if scard_pin is None:
+            return None
 
-    sign = SignProvider(pkcs11_driver=library, pin=pin, logger=logger)
-    smartcard_atr = SmartcardFetcher.get_smartcard_atr(logger)
-    smartcard_library = SmartcardFetcher.get_smartcard_library(smartcard_atr, logger)
-    smartcard = SmartcardFetcher.SmartcardFetcher(smartcard_library, logger=logger)
+        filename_desc = open(filename)
+        input_bio = BIO.File(filename_desc)
 
-    # ottengo l'id per estrarre il certificato dall smartcard
-    logger.status("get digital signature id")
-    ds_id = smartcard.get_ds_id()
+        smartcard = SmartcardFetcher.SmartcardFetcher(self.smartcard_driver_path, self.logger)
 
-    # ottengo la chiave privata
-    logger.status("get private key reference")
-    pkey = sign.get_ds_private_key(ds_id)
-    if pkey is None:
-        return False
+        self.logger.status("get digital signature id")
+        ds_id = smartcard.get_ds_id()  # ottengo l'id per estrarre il certificato dall smartcard
 
-    # ottengo il certificato
-    logger.status("get certificate reference")
-    certificate = sign.get_ds_certificate(ds_id)
-    if certificate is None:
-        return False
+        # ottengo la chiave privata
+        self.logger.status("get private key reference")
+        pkey = self.get_ds_private_key(ds_id)  # otteno la chiave privata tramite l'id
+        if pkey is None:
+            return False
 
-    signer = SMIME.SMIME()
-    signer.pkey = pkey
-    signer.x509 = certificate
+        # ottengo il certificato
+        self.logger.status("get certificate reference")
+        certificate = self.get_ds_certificate(ds_id)
+        if certificate is None:
+            return False
 
-    # firmo il buffer
-    pkcs7 = signer.sign(input_bio)  # TODO da aggiungere try-except
+        signer = SMIME.SMIME()
+        signer.pkey = pkey
+        signer.x509 = certificate
 
-    # creo un buffere di uscita
-    out = BIO.MemoryBuffer()
-    pkcs7.write_der(out)
-    # per scriverlo in pem pkcs11.write(out)
+        # firmo il buffer
+        pkcs7 = signer.sign(input_bio)  # TODO da aggiungere try-except
 
-    p7m_out = open("%s.p7m" % filename, "w")
-    p7m_out.write(out.read())
-    logger.status('file firmato correttamente')
-    return True
+        # creo un buffere di uscita
+        out = BIO.MemoryBuffer()
+        pkcs7.write_der(out)
+        # per scriverlo in pem pkcs11.write(out)
 
-def verify_file_with_ds_certificate(library, filename, p7m_file , is_self_signed=True, logger=None):
-    if not os.access(filename, os.R_OK):
-        logger.error("No fiename to verify %s found" % filename)
-        return None
-    if not os.access(p7m_file, os.R_OK):
-        logger.error("No file to sign %s found" % p7m_file)
-        return None
-    if not os.access(library, os.R_OK):
-        logger.error("No library %s file found" % library)
-        return None
+        p7m_out = open("%s.p7m" % filename, "w")
+        p7m_out.write(out.read())
+        self.logger.status('file firmato correttamente')
+        return True
 
-    sign = SignProvider(pkcs11_driver=library, logger=logger)
-    smartcard_atr = SmartcardFetcher.get_smartcard_atr(logger)
-    smartcard_library = SmartcardFetcher.get_smartcard_library(smartcard_atr, logger)
-    smartcard = SmartcardFetcher.SmartcardFetcher(smartcard_library, logger=logger)
+    def verify_file_with_ds_certificate(self, filename, p7filename, is_self_signed=True):
+        if not os.access(filename, os.R_OK):
+            self.logger.error("No filename to verify '%s' found" % filename)
+            return None
+        if not os.access(p7filename, os.R_OK):
+            self.logger.error("No filename to verify '%s' found" % filename)
+            return None
 
-    ds_id = smartcard.get_ds_id()  # ottengo l'id per estrarre il certificato dall smartcard
-    certificate = sign.get_ds_certificate(ds_id)  # ottengo il certificato
-    if certificate is None:
-        return None
+        if not self.load_engine():
+            return None  # nel caso sia fallito il caricamento
 
-    # creo uno store di certificati
-    store_stack = X509.X509_Stack()
-    store_stack.push(certificate)
+        smartcard_atr = SmartcardFetcher.get_smartcard_atr(self.logger)
+        smartcard_library = SmartcardFetcher.get_smartcard_library(
+            smartcard_atr, self.config, self.logger
+        )
+        smartcard = SmartcardFetcher.SmartcardFetcher(smartcard_library, self.logger)
 
-    store = X509.X509_Store()
-    store.add_x509(certificate)
+        self.logger.status('get ds id')
+        ds_id = smartcard.get_ds_id()  # ottengo l'id per estrarre il certificato dall smartcard
 
-    signer = SMIME.SMIME()
-    signer.set_x509_stack(store_stack)
-    signer.set_x509_store(store)
-    #p7, data = SMIME.load_pkcs7(p7m_file)  # carico il file firmato in formato PEM
+        self.logger.status('get ds certificate')
+        certificate = self.get_ds_certificate(ds_id)  # ottengo il certificato
+        if certificate is None:
+            return None
 
-    p7m_file_descriptor = open(p7m_file, "r")
-    input_bio = BIO.File(p7m_file_descriptor)
+        # creo uno store di certificati
+        store_stack = X509.X509_Stack()
+        store_stack.push(certificate)
 
-    # carico il file p7m 
-    p7 = SMIME.PKCS7(m2.pkcs7_read_bio_der(input_bio._ptr()), 1)  # al momento non c'e' nessun modo per estrarre i dati del DER dal certificato
-    # p7, data = SMIME.load_pkcs7_bio(input_bio)  # l'input bio deve essere in formato PEM (basa64)
+        store = X509.X509_Store()
+        store.add_x509(certificate)
 
-    data_bio = None
-    try:
-        if is_self_signed:
-            v = signer.verify(p7, data_bio, flags=SMIME.PKCS7_NOVERIFY)
-        else:
-            v = signer.verify(p7, data_bio)
-    except SMIME.SMIME_Error, e:
-        logger.error('smime error: ' + str(e))
-        return None
-    except SMIME.PKCS7_Error, e:
-        logger.error('pkcs7 error: ' + str(e))
-        return None
+        signer = SMIME.SMIME()
+        signer.set_x509_stack(store_stack)
+        signer.set_x509_store(store)
+        #p7, data = SMIME.load_pkcs7(p7m_file)  # carico il file firmato in formato PEM
 
-    # uso il replace perche' i file sono scritti secondo la convenzione binaria che va a capo con \r\n (windows style)
-    v = v.replace('\r', '')
+        self.logger.status('read p7mfile %s' % p7filename)
+        p7m_fd = open(p7filename, "rb")
+        p7_input_bio = BIO.File(p7m_fd)
 
-    if v != open(filename, "r").read():
-        logger.error("signed file differ from passed file")
-        return None
+        # carico il file p7m
+        p7 = SMIME.PKCS7(m2.pkcs7_read_bio_der(p7_input_bio._ptr()),
+                         1)  # al momento non c'e' nessun modo per estrarre i dati del DER dal certificato
+        # p7, data = SMIME.load_pkcs7_bio(p7_input_bio)  # l'input bio deve essere in formato PEM (basa64)
 
-    signers_cert = p7.get0_signers(store_stack)  # ottengo i firmatari del file
-    
-    if len(signers_cert) != 1:  # se ci sono piu' firmatari
-        logger.error("more than one signer present")
-        return None
+        data_bio = None
+        try:
+            if is_self_signed:
+                self.logger.status('verifing file')
+                v = signer.verify(p7, data_bio, flags=SMIME.PKCS7_NOVERIFY)
+            else:
+                v = signer.verify(p7, data_bio)
+        except SMIME.SMIME_Error, e:
+            self.logger.error('smime error: ' + str(e))
+            return None
+        except SMIME.PKCS7_Error, e:
+            self.logger.error('pkcs7 error: ' + str(e))
+            return None
 
-    if signers_cert[0].as_pem() != certificate.as_pem():  # il certificato nella smartcard e quello nelle firma non coincidono
-        logger.error("smartcard certificate and p7m certificate not correspond")
-        return None
+        # uso il replace perche' i file sono scritti secondo la convenzione binaria che va
+        # a capo con \r\n (windows style)
+        # v = v.replace('\r', '')
+        #
+        # logger.status('check difference betweet file and file-signed')
+        #
+        # log_filename = '%s.log' % filename
+        # open(log_filename, 'w').write(v)
+        # orig_file_buff = open(filename, "r").read()
+        # print len(v)
+        # print len(orig_file_buff)
+        #
+        # if v != orig_file_buff:
+        #     logger.error("signed file differ from passed file")
+        #     return None
 
-    return v
+        signers_cert = p7.get0_signers(store_stack)  # ottengo i firmatari del file
 
-if __name__ == "__main__":
+        if len(signers_cert) != 1:  # se ci sono piu' firmatari
+            self.logger.error("more than one signer present")
+            return None
 
-    def stampa(type, mess): print mess  # stamo i log sullo standard output
+        # il certificato nella smartcard e quello nelle firma non coincidono
+        if signers_cert[0].as_pem() != certificate.as_pem():
+            self.logger.error("smartcard certificate and p7m certificate not correspond")
+            return None
 
-    logger = MyLogger.Logger(stampa)
-    sign_file_with_ds_certificate("/usr/local/lib/libbit4ipki.so", "29035896", "prova.txt", logger)
-    #verify_file_with_ds_certificate("/usr/local/lib/libbit4ipki.so", "29035896", "prova.txt", "prova.txt.p7m")
+        self.logger.status('All Ok')
+        return v

@@ -1,54 +1,65 @@
 #Mettere sempre il build prima dell'install
 # NON FARE COSI
 # install:
-#		install -d $(BIN_DIR)
-#		install src/$(EXE) $(BIN_DIR)/$(EXE)
+#		install -d $(ABSOLUTE_BIN_DIR)
+#		install src/$(EXE) $(ABSOLUTE_BIN_DIR)/$(EXE)
 #
 # build:
 # 	@echo "Nothing to build this is a simple script"
 
-BIN_DIR = $(DESTDIR)/usr/bin
-ETC_DIR=$(DESTDIR)/etc/firmapiu
-SHARE_DIR = $(DESTDIR)/usr/share/firmapiu
+RELATIVE_BIN_DIR = usr/bin
+RELATIVE_ETC_DIR = etc/firmapiu
+RELATIVE_SHARE_DIR = usr/share/firmapiu
 
-MODULES_DIR = $(SHARE_DIR)/modules
-LIBRARY_DIR = $(SHARE_DIR)/library
-ICONS_DIR = $(SHARE_DIR)/icons
+# path assoluto delle directory
+ABSOLUTE_BIN_DIR = $(DESTDIR)/$(RELATIVE_BIN_DIR)
+ABSOLUTE_ETC_DIR = $(DESTDIR)/$(RELATIVE_ETC_DIR)
+ABSOLUTE_SHARE_DIR = $(DESTDIR)/$(RELATIVE_SHARE_DIR)
 
 EXE_CLI = firmapiu-cli
-EXE_PY = firmapiu-py
-EXE_GUI = firmapiu-gui
+EXE = firmapiu
+CONFIG_FILE = firmapiu.conf
 CONFIG = firmapiurc
 
 build:
-	sed -i "/^FIRMAPIU_PATH/d" bin/$(EXE_CLI) # sostituisco il path dei moduli
-	sed -i "s#../usr/share/firmapiu/icons/#/usr/share/firmapiu/icons/#" bin/$(EXE_GUI)
+	# sostituisco il path dei moduli
+	sed -i "/^FIRMAPIU_PATH/d" $(RELATIVE_SHARE_DIR)/gtk/firmapiu-gui.py
+	# sostituisco il path delle icone nella gui
+	sed -i "s#\.\./\.\./\.\./\.\./etc/firmapiu/firmapiu.conf#/etc/firmapiu/firmapiu.conf#" $(RELATIVE_SHARE_DIR)/gtk/firmapiu-gui.py
+	# sostituisco il path del lanciatore
+	sed -i "s#\.\./\.\.##" $(RELATIVE_BIN_DIR)/firmapiu
 
 install:
-	# create directory
-	install -d $(BIN_DIR) $(ETC_DIR) $(SHARE_DIR)
-	install -d $(MODULES_DIR) $(LIBRARY_DIR)
-	# install binary file
-	install bin/$(EXE_CLI) $(BIN_DIR)
-	install bin/$(EXE_GUI) $(BIN_DIR)
-	install bin/$(EXE_PY) $(BIN_DIR)
+	# creo le directory in /etc /usr/share e /bin
+	install -d $(ABSOLUTE_BIN_DIR) $(ABSOLUTE_ETC_DIR) $(ABSOLUTE_SHARE_DIR)
+	# creo la directory per i moduli, le librerie e le icone
+	install -d $(ABSOLUTE_SHARE_DIR)/module
+	install -d $(ABSOLUTE_SHARE_DIR)/library
+	install -d $(ABSOLUTE_SHARE_DIR)/icon
+	install -d $(ABSOLUTE_SHARE_DIR)/gtk
+	install -d $(ABSOLUTE_SHARE_DIR)/cli
 	# install icons
-	install -d $(ICONS_DIR) $(ICONS_DIR)/tango
-	install -m644 usr/share/firmapiu/icons/*.png $(ICONS_DIR)
-	install -m644 usr/share/firmapiu/icons/tango/*.png $(ICONS_DIR)/tango
+	install -d $(ABSOLUTE_SHARE_DIR)/icon
+	install -m644 $(RELATIVE_SHARE_DIR)/icon/*.png $(ABSOLUTE_SHARE_DIR)/icon
 	# install library and config file
-	install usr/share/firmapiu/modules/*.sh $(MODULES_DIR)
-	install usr/share/firmapiu/library/*.py $(LIBRARY_DIR)
-	install -m644 etc/firmapiu/$(CONFIG) $(ETC_DIR)
+	install $(RELATIVE_SHARE_DIR)/module/*.sh $(ABSOLUTE_SHARE_DIR)/module
+	install $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
+	install $(RELATIVE_SHARE_DIR)/gtk/*.py $(ABSOLUTE_SHARE_DIR)/gtk
+	install $(RELATIVE_SHARE_DIR)/cli/*.py $(ABSOLUTE_SHARE_DIR)/cli
+	# sposto i file di configurazione
+	install -m644 $(RELATIVE_ETC_DIR)/$(CONFIG) $(ABSOLUTE_ETC_DIR)
+	install -m644 $(RELATIVE_ETC_DIR)/$(CONFIG_FILE) $(ABSOLUTE_ETC_DIR)
+	# install binary file
+	install $(RELATIVE_BIN_DIR)/$(EXE) $(ABSOLUTE_BIN_DIR)
+	install $(RELATIVE_BIN_DIR)/$(EXE_CLI) $(ABSOLUTE_BIN_DIR)
 
 uninstall:
 	# rimuovo i file binary
-	rm $(BIN_DIR)/$(EXE_CLI)
-	rm $(BIN_DIR)/$(EXE_PY)
-	rm $(BIN_DIR)/$(EXE_GUI)
+	rm $(ABSOLUTE_BIN_DIR)/$(EXE)
+	rm $(ABSOLUTE_BIN_DIR)/$(EXE_CLI)
 	# rimuovo la cartella /etc/firmapiu
-	rm -r $(ETC_DIR)
+	rm -r $(ABSOLUTE_ETC_DIR)
 	# rimuovo la cartella /usr/share/firmapiu
-	rm -r $(SHARE_DIR)
+	rm -r $(ABSOLUTE_SHARE_DIR)
 
 .PHONY: build install uninstall

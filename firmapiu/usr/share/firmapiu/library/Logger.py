@@ -14,8 +14,8 @@ class Logger(object):
     def set_write_function(self, write_function):
         self.write_function = write_function
 
-    def write(self, type, message):
-        self.write_function(type, message)
+    def write(self, message_type, message):
+        self.write_function(message_type, message)
 
     def error(self, message):
         self.write(ERROR, message)
