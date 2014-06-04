@@ -4,12 +4,12 @@ import sys
 import commands
 from threading import Thread
 from gi.repository import Gtk
-from TSA import TimestampClient
 
 sys.path.append('../library')
 import SignProvider
 from Logger import Logger
 from ConfigFileLoader import ConfigFileLoader
+from TSA import TimestampClient
 
 
 class FirmapiuEntryDialog(Gtk.MessageDialog):
