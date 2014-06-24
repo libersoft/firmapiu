@@ -2,15 +2,14 @@
 
 import sys
 import commands
-from threading import Thread
+import thread
 from gi.repository import Gtk
 
 sys.path.append('../library')
-import SignProvider
-from Logger import Logger
-from ConfigFileLoader import ConfigFileLoader
-from TSA import TimestampClient
-
+from loglib import Logger, ERROR, DEBUG, STATUS
+from conflib import ConfigFileReader
+from signer import Signer
+from scardlib import SmartcardHolder
 
 class FirmapiuEntryDialog(Gtk.MessageDialog):
     def __init__(self, insert_title, insert_msg):
@@ -40,17 +39,27 @@ class FirmapiuEntryDialog(Gtk.MessageDialog):
 
 
 class FirmapiuWindow(Gtk.Window):
+    
     def __init__(self):
         Gtk.Window.__init__(self)
 
-        self.logger = Logger(self.write_log)
         self.icon_dir = "../icon/"
-        self.config = ConfigFileLoader(
-            '../../../../etc/firmapiu/firmapiu.conf',
-            self.config_handler,
-            self.logger)
+        
         self.connect("delete-event", Gtk.main_quit)
         self.populate_with_icon()  # aggiungo le icone
+        
+        self.logger = Logger(self.write_log)
+        
+        self.config = ConfigFileReader(
+            '../../../../etc/firmapiu/firmapiu.conf',
+            self.config_handler,  # handler per le richieste non contenute nel file di configurazione
+            self.logger
+        )
+        
+        self.signer = Signer(
+            config=self.config,
+            logger=self.logger
+        )
 
     def populate_with_icon(self):
         self.button_grid = Gtk.Grid()
@@ -68,35 +77,56 @@ class FirmapiuWindow(Gtk.Window):
         image_bottone_verifica.set_from_file(self.icon_dir + "verifica96x96.png")
         image_bottone_verifica.show()
         self.bottone_verifica.add(image_bottone_verifica)
-        self.bottone_verifica.connect("clicked", self.verifica)
+        self.bottone_verifica.connect("clicked", self.dispatcher)
 
         self.bottone_verifica = Gtk.Button()
         image_bottone_verifica = Gtk.Image()
         image_bottone_verifica.set_from_file(self.icon_dir + "verifica96x96.png")
         image_bottone_verifica.show()
         self.bottone_verifica.add(image_bottone_verifica)
-        self.bottone_verifica.connect("clicked", self.verifica)
+        self.bottone_verifica.connect("clicked", self.dispatcher)
 
         self.bottone_timestamp = Gtk.Button()
         image_bottone_timestamp = Gtk.Image()
         image_bottone_timestamp.set_from_file(self.icon_dir + "datacarta96x96.png")
         image_bottone_timestamp.show()
         self.bottone_timestamp.add(image_bottone_timestamp)
-        self.bottone_timestamp.connect("clicked", self.timestamp)
+        self.bottone_timestamp.connect("clicked", self.dispatcher)
 
         self.bottone_impostazioni = Gtk.Button()
         image_bottone_impostazioni = Gtk.Image()
         image_bottone_impostazioni.set_from_file(self.icon_dir + "impostazioni96x96.png")
         image_bottone_impostazioni.show()
         self.bottone_impostazioni.add(image_bottone_impostazioni)
-        self.bottone_impostazioni.connect("clicked", self.impostazioni)
+        self.bottone_impostazioni.connect("clicked", self.dispatcher)
 
         self.bottone_impostazioni_avanzate = Gtk.Button()
         image_bottone_impostazioni_avanzate = Gtk.Image()
         image_bottone_impostazioni_avanzate.set_from_file(self.icon_dir + "avanzate96x96.png")
         image_bottone_impostazioni_avanzate.show()
         self.bottone_impostazioni_avanzate.add(image_bottone_impostazioni_avanzate)
-        self.bottone_impostazioni_avanzate.connect("clicked", self.impostazioni_avanzate)
+        self.bottone_impostazioni_avanzate.connect("clicked", self.dispatcher)
+
+        self.installa_driver = Gtk.Button(label='installa driver')
+        #image_installa_driver = Gtk.Image()
+        #image_installa_driver.set_from_file(self.icon_dir + "avanzate96x96.png")
+        #image_installa_driver.show()
+        #self.installa_driver.add(image_installa_driver)
+        self.installa_driver.connect("clicked", self.dispatcher)
+
+        self.carica_cert = Gtk.Button(label='carica certificati')
+        #image_installa_driver = Gtk.Image()
+        #image_installa_driver.set_from_file(self.icon_dir + "avanzate96x96.png")
+        #image_installa_driver.show()
+        #self.installa_driver.add(image_installa_driver)
+        self.carica_cert.connect("clicked", self.carica_certificati)
+
+        self.carica_crl_button = Gtk.Button(label='carica crl')
+        #image_installa_driver = Gtk.Image()
+        #image_installa_driver.set_from_file(self.icon_dir + "avanzate96x96.png")
+        #image_installa_driver.show()
+        #self.installa_driver.add(image_installa_driver)
+        self.carica_crl_button.connect("clicked", self.carica_crl)
 
         self.bottone_esci = Gtk.Button()
         image_bottone_esci = Gtk.Image()
@@ -109,7 +139,6 @@ class FirmapiuWindow(Gtk.Window):
         self.log_buffer = self.log_view.get_buffer()
         self.log_buffer.set_modified(False)
         self.log_view.show()
-        self.logger.write(None, "finestra di log del programma")
 
         self.button_grid.attach(self.bottone_firma, 1, 0, 1, 1)
         self.button_grid.attach(self.bottone_verifica, 2, 0, 1, 1)
@@ -117,12 +146,20 @@ class FirmapiuWindow(Gtk.Window):
         self.button_grid.attach(self.bottone_impostazioni, 1, 1, 1, 1)
         self.button_grid.attach(self.bottone_impostazioni_avanzate, 2, 1, 1, 1)
         self.button_grid.attach(self.bottone_esci, 3, 1, 1, 1)
+        self.button_grid.attach(self.installa_driver, 1, 2, 1, 1)
+        self.button_grid.attach(self.carica_cert, 2, 2, 1, 1)
+        self.button_grid.attach(self.carica_crl_button, 3, 2, 1, 1)
         #self.button_grid.attach(self.label_drag_drop, 1, 2, 3, 1)
         self.button_grid.attach(self.log_view, 1, 3, 3, 1)
 
     # Funzione che verra chiamata dall'handler ogni volta che ci saranno dei da inserire dei messaggi
     def write_log(self, msg_type, msg_str):
-        self.log_buffer.insert(self.log_buffer.get_end_iter(), "%s\n" % msg_str)
+        if msg_type == ERROR:
+            self.log_buffer.insert(self.log_buffer.get_end_iter(), "[error] %s\n" % msg_str)
+        elif msg_type == DEBUG:
+            self.log_buffer.insert(self.log_buffer.get_end_iter(), "[debug] %s\n" % msg_str)
+        else:
+            self.log_buffer.insert(self.log_buffer.get_end_iter(), "%s\n" % msg_str)
 
     def launch_choose_window(self, extension=None):
         dialog = Gtk.FileChooserDialog(
@@ -165,29 +202,53 @@ class FirmapiuWindow(Gtk.Window):
         entryDialog.destroy()
         return result
 
+    def dispatcher(self, widget):
+        self.verifica(widget)
+        #thread.start_new_thread(firma, ())
+
+    def carica_crl(self, widget):
+        self.signer.load_crl_store()
+
+    def carica_certificati(self, widget):
+        self.signer.load_ca_store()
+
     def firma(self, widget):
         file_choose = self.launch_choose_window()
         if file_choose is not None:  # se ho scelto il file
-            signer = SignProvider.SignProvider(self.config, self.logger, True)
-            signer.sign_file_with_ds_certificate(file_choose)
+                        
+            hold = SmartcardHolder(
+                config=self.config,
+                logger=self.logger
+            )
+            
+            self.signer.sign_file(
+                holder=hold,
+                filename=file_choose
+            )
 
     def verifica(self, widget):
         file_choose = self.launch_choose_window(extension='p7m')  # scelgo il file da verificare
         if file_choose is not None:
-            signer = SignProvider.SignProvider(self.config, self.logger)
-            signer.verify_file_with_ds_certificate(file_choose, file_choose)
+            self.signer.verify_file(
+                filename=file_choose
+            )
 
     def timestamp(self, widget):
         file_choose = self.launch_choose_window()
         if file_choose is not None:
-            timest = TimestampClient(self.config, self.logger)
-            timest.send_timestamp_query(file_choose)  # eseguo la richiesta di timestamp
-            # TODO va salvato il file
-
+            self.signer.timestamp_file(
+                filename=file_choose
+            )
+            
     def verifica_timestamp(self, widget):
         file_choose = self.launch_choose_window(extension='tsr')  # scelgo il file da verificare
         if file_choose is not None:
-            self.logger.status('verifica timestamp pressed')
+            self.signer.verify_timestamp_file(file_choose, file_choose)
+
+    def install_driver(self,widget):
+        driver_choose = None
+        if driver_choose is not None:
+            self.signer.installa_driver(driver_choose)
 
     def impostazioni(self, widget):
         self.logger.status('impostazioni pressed')

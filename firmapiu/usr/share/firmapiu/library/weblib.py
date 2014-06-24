@@ -9,17 +9,19 @@ class WebRequest(object):
             raise AttributeError
         if logger is None:
             raise AttributeError
-
+        if url is not isinstance(url, str):
+            raise AttributeError
+       
+        self.crl_url = url  # TODO da controllare che venga inserito un crl_url
         self.curl_obj = pycurl.Curl()
-        self.url = url  # TODO da controllare che venga inserito un url
         self.headers = []
         self.buffer_out = StringIO.StringIO()
 
         self.file_send = None
         self.logger = logger
 
-        # setto l'url
-        self.curl_obj.setopt(pycurl.URL, self.url)
+        # setto l'crl_url
+        self.curl_obj.setopt(pycurl.URL, self.crl_url)
         # setto il buffer di uscita
         self.curl_obj.setopt(pycurl.WRITEFUNCTION, self.buffer_out.write)
 
@@ -30,7 +32,6 @@ class WebRequest(object):
         self.curl_obj.setopt(pycurl.USERPWD, "%s:%s" % (http_username, http_password))
 
     def request(self, buff=None):
-        
         if buff is not None:  # se nella richiesta invio qualcosa
             self.curl_obj.setopt(pycurl.POST, 1)
             buff_size = len(buff)

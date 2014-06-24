@@ -29,7 +29,7 @@
 
 # path dove verranno messi i moduli
 FIRMAPIU_PATH="${PWD}/.."
-MODULES_PATH="${FIRMAPIU_PATH}/usr/share/firmapiu/modules"
+MODULES_PATH="${FIRMAPIU_PATH}/usr/share/firmapiu/module"
 
 print_usage() {
 	echo "Uso: firmapiu-cli [OPTION]... file"
