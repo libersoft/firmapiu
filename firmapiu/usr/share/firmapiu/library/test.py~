@@ -1,0 +1,24 @@
+import M2Crypto
+
+class Pippo(object):
+    
+    def __new__(cls, *args, **kwargs):
+        print '__new__'
+        return object.__new__(cls, *args, **kwargs)
+    
+    def __init__(self):
+        print '__init__'
+
+    def __enter__(self):
+        print '__enter__'
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print '__exit__'
+        
+    def __del__(self):
+        print '__del__'
+        
+engine = M2Crypto.Engine.load_dynamic_engine('pkcs11', '/usr/lib64/engines/engine_pkcs11.so')
+engine.ctrl_cmd_string('MODULE_PATH', '/usr/lib64/bit4id/libbit4ipki.so')
+engine.init()
+print 'all done'

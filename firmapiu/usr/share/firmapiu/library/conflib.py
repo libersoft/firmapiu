@@ -108,6 +108,8 @@ class ConfigReader(object):
 class ConfigFileReader(ConfigReader):
 
     def __init__(self, fileconfig, handler, logger):
+        assert isinstance(fileconfig, str)
+        
         if not os.access(fileconfig, os.R_OK):
             raise AttributeError
         

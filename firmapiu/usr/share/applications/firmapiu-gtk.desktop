@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FirmaPiu
+Comment=Digital Signer Software
+Icon=/usr/share/firmapiu/icon/fpiublu.png
+Exec=/usr/share/firmapiu/library/firmapiugui.py
+Terminal=false
+Categories=Application;Network;

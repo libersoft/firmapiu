@@ -1,4 +1,3 @@
-import os
 import re
 import StringIO
 import requests
@@ -11,7 +10,7 @@ import socket
 request_timeout = 5
 
 
-def test_ldap_connection(fullurl):
+def _test_ldap_connection(fullurl):
     try:
         host = fullurl.split(':')
         if len(host) == 1:
@@ -28,22 +27,22 @@ def test_ldap_connection(fullurl):
 
 def execute_download(url):
     if url.startswith('http://'):
-        return http_download(url)
+        return _http_download(url)
     elif url.startswith('https://'):
-        return https_download(url)
+        return _https_download(url)
     elif url.startswith('ldap://') or url.startswith('LDAP://'):
-        return ldap_download(url)
+        return _ldap_download(url)
         #return None, 'ldap not implemented'
     else:
         return None, 'dowload url not recognized'
 
-def https_download(url):
+def _https_download(url):
     try:
-        return http_download(url)
+        return _http_download(url)
     except requests.exceptions.SSLError:  # errore ssl nel server
-        return http_download(url, verify=False)
+        return _http_download(url, verify=False)
 
-def http_download(url, verify=True):
+def _http_download(url, verify=True):
     try:
         res = requests.get(url, timeout=request_timeout, verify=verify)
         if res.status_code == 200:
@@ -53,7 +52,7 @@ def http_download(url, verify=True):
     except requests.exceptions.Timeout:
         return None, 'http timeout'
 
-def ldap_download(url):
+def _ldap_download(url):
     url = url.replace('LDAP', 'ldap')
     if ldapurl.isLDAPUrl(url):
         try:
@@ -61,7 +60,7 @@ def ldap_download(url):
         except ValueError, e:
             return None, e
         try:
-            if not test_ldap_connection(ldap_url.hostport):
+            if not _test_ldap_connection(ldap_url.hostport):
                 return None, 'test connection failed'
             l = ldap.initialize('ldap://%s' % ldap_url.hostport)
             
@@ -164,7 +163,7 @@ def _load_pem_cert_buff(buff_str):
     return cert_list
 
 
-def extract_crl_uri(cert):
+def extract_crl_url(cert):
     assert isinstance(cert, M2Crypto.X509.X509)
     try:
         crl_str = cert.get_ext("crlDistributionPoints").get_value()
@@ -178,142 +177,16 @@ def extract_crl_uri(cert):
     
     return match.group(1)
 
-
-class NoCACertificateException(Exception):
-    pass
-
-
-class CACertificateNotFoundException(Exception):
-    pass
+def extract_rev_list(crl):
+    assert isinstance(crl, OpenSSL.crypto.CRL)
+    return crl.get_revoked()
 
 
-class CACertificate(object):
-    
-    def __init__(self, cert, crldict):
-        assert isinstance(cert, M2Crypto.X509.X509)
-        assert isinstance(crldict, CRLDict)
-        
-        self.certificate = cert
-        self.crl = None
-        if cert.check_ca() == 0:
-            raise NoCACertificateException()
-        crl_url = extract_crl_uri(cert)  # se l'url non e' stato trovato e' None
-        if crl_url is not None:
-            crl = crldict.get_crl(crl_url)
-            if crl is None:  # se il certificato non e' nel dizionario lo aggiungo
-                crl = CRL(crl_url)
-                crldict.add_crl(crl)
-            self.crl = crl
-        
-    def get_certificate(self):
-        return self.certificate
-    
-    def get_crl(self):
-        return self.crl
+def obtain_crl(url):
+    assert isinstance(url, str)
+    data, errmsg = execute_download(url)
+    if data is None:
+        print errmsg
+        return None
+    return load_crl(data)
 
-        
-class CRL(object):
-    
-    def __init__(self, url):
-        assert isinstance(url, str)
-        self.url = url
-        self.revoked = None
-        
-        #print 'try to get crl for url', url
-        data, errmsg = execute_download(url)
-        if data is not None:
-            crl = load_crl(data)
-            if crl is not None:
-                self.revoked = crl.get_revoked()
-                #print "crl for %s added" % url
-            else:
-                print 'failed to parse crl', url 
-        else:
-            print 'failed to download url "%s":' % url, errmsg 
-        
-    def get_url(self):
-        return self.url
-    
-    def is_revoked(self, cert):
-        if self.url is None:
-            print 'non posso verificare senza un url'
-            return False
-        if self.revoked is None:
-            print 'non posso verificare senza la lista revocati'
-            return False
-        
-        assert isinstance(cert, M2Crypto.X509.X509)
-        for rev in self.revoked:
-            if rev.get_serial() == cert.get_serial_number():
-                return True
-        return False
-            
-        
-        
-class CACertificateDict(object):
-    
-    def __init__(self):
-        self.dict = {}
-        
-    def add_ca_certificate(self, ca_cert):
-        assert isinstance(ca_cert, CACertificate)
-        subj = ca_cert.get_certificate().get_subject()
-        if self.dict.has_key(subj):  # se e' gia presente del dizionario
-            return False
-        self.dict[subj] = ca_cert
-        return True
-        
-    def get_ca_certificate(self, cert):
-        assert isinstance(cert, M2Crypto.X509.X509)
-        subj = cert.get_subject()
-        if not self.dict.has_key(subj):
-            return None
-        return self.dict[subj]
-    
-    def is_revoked(self, cert):
-        assert isinstance(cert, M2Crypto.X509.X509)
-        ca_cert = self.get_ca_certificate(cert)
-        if ca_cert is None:  # non posso verificare senza una certificato di una CA
-            raise CACertificateNotFoundException()
-        ca_crl = ca_cert.get_crl()  # non puo' essere None
-        return ca_crl.is_revoked(cert)
-
-        
-        
-class CRLDict(object):
-    
-    def __init__(self):
-        self.dict = {}
-        
-    def get_crl(self, url):
-        if url is None:
-            return None
-        if not self.dict.has_key(url):
-            return None
-        return self.dict[url]
-        
-    def add_crl(self, crl):
-        assert isinstance(crl, CRL)
-        if self.dict.has_key(crl.get_url()):  # se e' gia contenuta nel dizionario
-            return False
-        self.dict[crl.get_url()] = crl
-        return True
-
-def load_certficate_path(dirpath):
-    cad = CACertificateDict()
-    cd = CRLDict()
-    
-    for root, _dirs, files in os.walk(dirpath):
-        for name in files:
-            path = os.path.join(root, name)
-            with open(path) as f:
-                data = f.read()
-            cert_list = load_certificate(data)
-            for cert in cert_list:
-                ca_cert = CACertificate(cert, cd)
-                cad.add_ca_certificate(ca_cert)  
-
-    return cad, cd
-
-if __name__ == "__main__":
-    load_certficate_path('/home/samuel/Scaricati/elencopubblico')

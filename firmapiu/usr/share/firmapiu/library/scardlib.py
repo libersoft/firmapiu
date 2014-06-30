@@ -4,6 +4,7 @@ from smartcard.util import toHexString
 from smartcard import pcsc
 from smartcard import System
 from smartcard import Exceptions
+import localconfig
 
 import PyKCS11
 import M2Crypto.Engine
@@ -37,21 +38,21 @@ class SmartcardHolder(Holder):
         self.config = config
         self.logger = logger
 
-    def load_pkcs11(self):
+    def _load_pkcs11(self):
         if self.pkcs11_obj is not None:
             return True
         
         self.pkcs11_obj = PyKCS11.PyKCS11Lib()
         self.pkcs11_obj.load(self.smartcard_driver_path)
         slots = self.pkcs11_obj.getSlotList()
-        if not len(slots):
-            raise NoSlotFoundException()
+        if not len(slots):  # se non trovo slot
+            return False
         # di default uso la prima slot
         self.session = self.pkcs11_obj.openSession(slots[0])
         return True
      
     def get_ds_id(self):
-        if self.load_pkcs11():
+        if not self._load_pkcs11():
             return None
 
         cert_objects = self.session.findObjects(
@@ -94,6 +95,10 @@ class SmartcardHolder(Holder):
         if engine_drv_path is None:
             return False
 
+        if not os.access(engine_drv_path, os.R_OK):
+            self.logger.error('no engine driver path found at %s' % engine_drv_path)
+            return False
+
         self.engine_driver_path = engine_drv_path
 
         scard_drv_path = self.config.get_smartcard_driver_path()  # ottengo il path della smartcard dalle config
@@ -106,20 +111,25 @@ class SmartcardHolder(Holder):
             )  # ottengo il path del driver della smarcard
             if scard_drv_path is None:  # se non sono ancora riuscito ad ottenere il path
                 return False
-
         self.smartcard_driver_path = scard_drv_path
 
         scard_pin = self.config.get_smartcard_pin()  # ottengo il pin della smartcard
+        if scard_pin is None:
+            return False
 
         if M2Crypto.Engine.load_dynamic_engine('pkcs11', self.engine_driver_path) is None:
+            self.logger.error('failed to create dynamic pkcs11 engine')
             return False
+        
         self.logger.debug('create engine using pin:%s' % scard_pin)
         self.pkcs11_engine = M2Crypto.Engine.Engine('pkcs11')
         self.pkcs11_engine.ctrl_cmd_string('MODULE_PATH', self.smartcard_driver_path)
         self.pkcs11_engine.ctrl_cmd_string("PIN", scard_pin)  # senza il pin l'engine chiede il pin da prompt
         # TODO da controllare il login con un pin errate perche' non da' errore
-        self.pkcs11_engine.init()
-        return True
+        if not self.pkcs11_engine.init():
+            return False
+        else:
+            return True
     
     def get_private_key(self):
         '''
@@ -128,14 +138,11 @@ class SmartcardHolder(Holder):
         if not self.load_engine():
             return None  # nel caso sia fallito il caricamento
 
-        if not self.must_fetch_pin:  # se non ho avuto accesso al pin
-            self.logger.error('pin not insert during initialization, I can\'t access to private key')
-            return None
         try:
             priv_key = self.pkcs11_engine.load_private_key('slot_0-id_%s' % self.get_ds_id())
             return priv_key
         except M2Crypto.Engine.EngineError:
-            self.logger.error("no private key found")
+            self.logger.error("chiave privata non ottenuta, forse pin sbagliato")
             return None
         
     def get_certificate(self):
@@ -176,8 +183,8 @@ def get_smartcard_atr(logger):
         connection.connect()
         atr_str = toHexString(connection.getATR()).replace(" ", ":").lower()
         connection.disconnect()
-    except Exceptions.CardConnectionException, errmsg:
-        logger.error(errmsg)
+    except Exceptions.CardConnectionException:
+        logger.error('No smartcard inserted')
         return None
 
     return atr_str
@@ -188,10 +195,7 @@ def get_smartcard_library(atr, config, logger):
     if config is None or logger is None:
         raise AttributeError
 
-    smartcard_info_path = config.get_smartcard_info_path()
-    if smartcard_info_path is None:
-        logger.error("smartcard library not set in config")
-        return None
+    smartcard_info_path = localconfig.LIBRARY_FILE
 
     if not os.path.exists(smartcard_info_path):
         logger.error('no file %s found' % smartcard_info_path)
