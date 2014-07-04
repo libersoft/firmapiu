@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if ! python -c 'import appdirs' 2>/dev/null
+then
+    echo "library appdirs not installed, please run with sudo or root permission:"
+    echo "\t\tpip install appdirs"
+    exit 1
+fi
+
+
+# check_firstrun()
+if [ ! -d "$HOME/.config/firmapiu" ]; then
+    mkdir -p "$HOME/.config/firmapiu"
+fi
+
+exec /usr/bin/python -O /usr/share/firmapiu/library/firmapiugui.py $@
+

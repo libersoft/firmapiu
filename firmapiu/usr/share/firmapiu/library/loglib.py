@@ -6,16 +6,19 @@ DEBUG = 2
 
 class Logger(object):
 
-    def __init__(self, write_function):
-        if write_function is None:
-            raise AttributeError
-        self.write_function = write_function
-
-    def set_write_function(self, write_function):
-        self.write_function = write_function
+    def __init__(self):
+        self._write_function = None
+        
+    @property
+    def function(self):
+        return self._write_function
+        
+    @function.setter
+    def function(self, new_function):
+        self._write_function = new_function
 
     def write(self, message_type, message):
-        self.write_function(message_type, message)
+        self._write_function(message_type, message)
 
     def error(self, message):
         self.write(ERROR, message)

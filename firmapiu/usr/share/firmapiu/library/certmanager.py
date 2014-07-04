@@ -12,7 +12,6 @@ from certlib import extract_crl_url
 from certlib import obtain_crl
 from certlib import extract_rev_list
 from certlib import load_certificate
-from M2Crypto import X509
 
 
 class CACertificateNotFoundException(Exception):
@@ -152,10 +151,10 @@ class CACertificate(object):
     crl_url = Unicode()
     crl = Reference(crl_url, CRL.crl_url)
     
-    def __init__(self, hash, data):
-        assert isinstance(hash, str)
+    def __init__(self, hash_data, data):
+        assert isinstance(hash_data, str)
         assert isinstance(data, str)
-        self.cert_hash = unicode(hash)
+        self.cert_hash = unicode(hash_data)
         self.cert_data = unicode(data)
     
     

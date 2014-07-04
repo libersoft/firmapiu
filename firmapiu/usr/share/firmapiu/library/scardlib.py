@@ -36,7 +36,7 @@ class SmartcardHolder(Holder):
         self.pkcs11_engine = None
         self.pkcs11_obj = None
         self.config = config
-        self.logger = logger
+        self._logger = logger
 
     def _load_pkcs11(self):
         if self.pkcs11_obj is not None:
@@ -67,7 +67,7 @@ class SmartcardHolder(Holder):
         cert_objects_len = len(cert_objects)
 
         if not cert_objects_len:  # se non ho trovato certificati
-            self.logger.error('no token found into smartcard')
+            self._logger.error('no token found into smartcard')
             raise NoTokenFoundException()
 
         ds_id = None
@@ -80,7 +80,7 @@ class SmartcardHolder(Holder):
                 # value = attr_dict[PyKCS11.CKA_VALUE]  # ottengo una tupla contenente il DER della smartcard
 
         if ds_id is None:
-            self.logger.error('no DS signature found')
+            self._logger.error('no DS signature found')
             raise NoDigitalSignaturaFoundException()
 
         return ds_id 
@@ -96,18 +96,18 @@ class SmartcardHolder(Holder):
             return False
 
         if not os.access(engine_drv_path, os.R_OK):
-            self.logger.error('no engine driver path found at %s' % engine_drv_path)
+            self._logger.error('no engine driver path found at %s' % engine_drv_path)
             return False
 
         self.engine_driver_path = engine_drv_path
 
         scard_drv_path = self.config.get_smartcard_driver_path()  # ottengo il path della smartcard dalle config
         if scard_drv_path is None:  # se non sono riuscito ad ottenere il driver della smartcard
-            scard_atr = get_smartcard_atr(self.logger)  # ottengo l'atr della smartcard
+            scard_atr = get_smartcard_atr(self._logger)  # ottengo l'atr della smartcard
             if scard_atr is None:  # se non sono riuscito ad ottenere l'atr
                 return False
             scard_drv_path = get_smartcard_library(
-                scard_atr, self.config, self.logger
+                scard_atr, self.config, self._logger
             )  # ottengo il path del driver della smarcard
             if scard_drv_path is None:  # se non sono ancora riuscito ad ottenere il path
                 return False
@@ -118,10 +118,10 @@ class SmartcardHolder(Holder):
             return False
 
         if M2Crypto.Engine.load_dynamic_engine('pkcs11', self.engine_driver_path) is None:
-            self.logger.error('failed to create dynamic pkcs11 engine')
+            self._logger.error('failed to create dynamic pkcs11 engine')
             return False
         
-        self.logger.debug('create engine using pin:%s' % scard_pin)
+        self._logger.debug('create engine using pin:%s' % scard_pin)
         self.pkcs11_engine = M2Crypto.Engine.Engine('pkcs11')
         self.pkcs11_engine.ctrl_cmd_string('MODULE_PATH', self.smartcard_driver_path)
         self.pkcs11_engine.ctrl_cmd_string("PIN", scard_pin)  # senza il pin l'engine chiede il pin da prompt
@@ -142,7 +142,7 @@ class SmartcardHolder(Holder):
             priv_key = self.pkcs11_engine.load_private_key('slot_0-id_%s' % self.get_ds_id())
             return priv_key
         except M2Crypto.Engine.EngineError:
-            self.logger.error("chiave privata non ottenuta, forse pin sbagliato")
+            self._logger.error("chiave privata non ottenuta, forse pin sbagliato")
             return None
         
     def get_certificate(self):
@@ -156,7 +156,7 @@ class SmartcardHolder(Holder):
             cert = self.pkcs11_engine.load_certificate('slot_0-id_%s' % self.get_ds_id())
             return cert
         except M2Crypto.Engine.EngineError:
-            self.logger.error("no certificate found")
+            self._logger.error("no certificate found")
             return None
 
 

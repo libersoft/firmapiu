@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 from tempfile import mkdtemp
 from zipfile import ZipFile
 import tarfile
-import json
+#import json
 import conflib
 
 LIBRARY_PATH = '/usr/local/lib'
@@ -90,10 +90,12 @@ def is_root():
 def get_architecture():
     return platform.architecture()[0]
 
-def download_to_temp_dir(url):
+def download_to_temp_dir(url, logger):
     tempdir = mkdtemp(prefix='firmapiu-')
+    logger.status('directory temporanea creata')
     with NamedTemporaryFile(dir=tempdir, delete=False) as temp:
         filename = temp.name
+        logger.status('download file from %s' % url)
         res = requests.get(url)
         temp.write(res.content)
         
@@ -102,24 +104,24 @@ def download_to_temp_dir(url):
 def clean_tempdir(filename):
     os.unlink(filename)
     
-def extract_zip(filename, to_extract):
+def extract_zip(filename, to_extract, logger):
     if not os.access(filename, os.R_OK):
-        print 'file %s not exists' % filename
+        logger.error('file %s not exists' % filename)
         return False
     
     with ZipFile(filename) as zipfile:        
         for ext in to_extract:
-            print "extracting %s" % ext
+            logger.status("extracting %s" % ext)
             try:
                 source = zipfile.open(ext)
             except KeyError:  # ext non e' stato trovato nell'archivio
-                print 'il file zip non contiene %s' % ext
+                logger.error('il file zip non contiene %s' % ext)
                 return False
             taget_path = os.path.join(LIBRARY_PATH, os.path.basename(ext))
             target = file(taget_path, 'w')
             try:
                 shutil.copyfileobj(source, target)
-                print 'change file permission'
+                logger.status('change file permission')
                 os.chmod(taget_path, 0755)
             except IOError:
                 return False
@@ -132,18 +134,18 @@ def extract_all_zip(filename, destdir):
         
     return True
 
-def extract_tar(filename, to_extract):
+def extract_tar(filename, to_extract, logger):
     if not os.access(filename, os.R_OK):
-        print 'file %s not exists' % filename
+        logger.error('file %s not exists' % filename)
         return False
     
     with tarfile.open(filename) as tar:
         for ext in to_extract:
-            print "extracting %s" % ext
+            logger.status('extracting %s' % ext)
             try:
                 tar_info = tar.getmember(ext)
             except KeyError:  # il membro non e' stato trovato
-                print 'il file tar non contiene %s' % ext
+                logger.error('il file tar non contiene %s' % ext)
                 return False
             
             taget_path = os.path.join(LIBRARY_PATH, os.path.basename(ext))
@@ -155,7 +157,7 @@ def extract_tar(filename, to_extract):
     
     return True
 
-def install_athena():
+def install_athena(logger):
     if not is_root():
         return False
     
@@ -168,13 +170,13 @@ def install_athena():
     else:
         return False 
     
-    filename = download_to_temp_dir(url)
-    if extract_zip(filename, to_extract):
+    filename = download_to_temp_dir(url, logger)
+    if extract_zip(filename, to_extract, logger):
         return True
     else:
         return False
         
-def install_cardos():
+def install_cardos(logger):
     if not is_root():
         return False
     
@@ -203,11 +205,11 @@ def install_cardos():
         #'etc/sieca.conf'
     )
     
-    filename = download_to_temp_dir(url)
-    extract_tar(filename, to_extract)
+    filename = download_to_temp_dir(url, logger)
+    extract_tar(filename, to_extract, logger)
     return True
     
-def install_incard():
+def install_incard(logger):
     if not is_root():
         return False
     
@@ -230,12 +232,12 @@ def install_incard():
     else:
         return False
     
-    filename = download_to_temp_dir(url)
-    extract_zip(filename, to_extract)
+    filename = download_to_temp_dir(url, logger)
+    extract_zip(filename, to_extract, logger)
     
     return True
 
-def install_oberthur():
+def install_oberthur(logger):
     if not is_root():
         return False
     
@@ -256,8 +258,8 @@ def install_oberthur():
     else:
         return False
     
-    filename = download_to_temp_dir(url)
-    extract_zip(filename, to_extract)
+    filename = download_to_temp_dir(url, logger)
+    extract_zip(filename, to_extract, logger)
     
     return True
     

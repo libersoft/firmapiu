@@ -18,7 +18,7 @@ class WebRequest(object):
         self.buffer_out = StringIO.StringIO()
 
         self.file_send = None
-        self.logger = logger
+        self._logger = logger
 
         # setto l'crl_url
         self.curl_obj.setopt(pycurl.URL, self.crl_url)
@@ -45,7 +45,7 @@ class WebRequest(object):
         try:
             self.curl_obj.perform()
         except pycurl.error, errmsg:
-            self.logger.error(errmsg)
+            self._logger.error(errmsg)
             return None
         finally:
             self.curl_obj.close()

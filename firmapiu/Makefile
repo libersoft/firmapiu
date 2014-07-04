@@ -18,9 +18,6 @@ ABSOLUTE_ETC_DIR = $(DESTDIR)/$(RELATIVE_ETC_DIR)
 ABSOLUTE_SHARE_DIR = $(DESTDIR)/$(RELATIVE_SHARE_DIR)
 ABSOLUTE_MENU_LAUNCHER = $(DESTDIR)/$(RELATIVE_MENU_LAUNCHER)
 
-CONFIG_FILE = firmapiu.conf
-CONFIG = firmapiurc
-
 build:
 	# sostituisco il path dei moduli
 	# sostituisco il path delle icone nella gui
@@ -34,6 +31,7 @@ install:
 	install -d $(ABSOLUTE_ETC_DIR)/certs
 	install -d $(ABSOLUTE_SHARE_DIR)/module
 	install -d $(ABSOLUTE_SHARE_DIR)/library
+	install -d $(ABSOLUTE_SHARE_DIR)/library/rfc3161
 	install -d $(ABSOLUTE_SHARE_DIR)/icon
 	# install icons
 	install -d $(ABSOLUTE_SHARE_DIR)/icon
@@ -41,14 +39,15 @@ install:
 	# install library and config file
 	install $(RELATIVE_SHARE_DIR)/module/*.sh $(ABSOLUTE_SHARE_DIR)/module
 	install $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
-	install $(RELATIVE_SHARE_DIR)/gtk/*.py $(ABSOLUTE_SHARE_DIR)/gtk
-	install $(RELATIVE_SHARE_DIR)/cli/*.py $(ABSOLUTE_SHARE_DIR)/cli
+	install $(RELATIVE_SHARE_DIR)/library/rfc3161/*.py $(ABSOLUTE_SHARE_DIR)/library/rfc3161
 	# sposto i file di configurazione
-	install -m644 $(RELATIVE_ETC_DIR)/$(CONFIG) $(ABSOLUTE_ETC_DIR)
-	install -m644 $(RELATIVE_ETC_DIR)/$(CONFIG_FILE) $(ABSOLUTE_ETC_DIR)
+	install -m644 $(RELATIVE_ETC_DIR)/firmapiurc $(ABSOLUTE_ETC_DIR)
+	install -m644 $(RELATIVE_ETC_DIR)/firmapiu.conf $(ABSOLUTE_ETC_DIR)
+	install -m644 $(RELATIVE_ETC_DIR)/libraries.xml $(ABSOLUTE_ETC_DIR)
 	# install binary file
 	@echo "creo launcher del programma"
 	install -m644 $(RELATIVE_MENU_LAUNCHER)/firmapiu-gtk.desktop $(ABSOLUTE_MENU_LAUNCHER)
+	install -m644 $(RELATIVE_BIN_DIR)/firmapiugui $(ABSOLUTE_BIN_DIR)
 	
 
 uninstall:
