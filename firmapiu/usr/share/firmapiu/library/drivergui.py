@@ -1,91 +1,43 @@
 import sys
-from threading import Thread
 from gi.repository import Gtk, GObject
+from fpiuwidget import FirmapiuWindow
+from fpiuwidget import FirmapiuButton
 from driverlib import install_athena
 from driverlib import install_cardos
 from driverlib import install_incard
 from driverlib import install_oberthur
 from driverlib import is_root
-from loglib import Logger
 
-driver = {
-    'Athena': install_athena,
-    'cardOS': install_cardos,
-    'Incard': install_incard,
-    'Oberthur': install_oberthur
-}
-
-
-class InstallThread(Thread, GObject.GObject):
-    def __init__(self, main, logger):
-        self.main = main
-        self.logger = logger
-        self.exec_function = None
-        self.exec_args = None
-        self.logger.function = self.logger_callback
-
-    def logger_callback(self, msg_type, msg_str):
-        '''
-        Funzione chiamata quando devono essere scritte delle 
-        informazioni di log.
-        Viene inviato un segnale con le informazioni
-        '''
-        self.main.emit_on_main('log', msg_type, msg_str)
-
-    def set_function(self, function, *args):
-        self.exec_function = function
-        self.exec_args = args
-        
-    def run(self):
-        self.exec_function(*self.exec_args)
-
-
-class FirmapiuLogView(Gtk.TextView):
-    def __init__(self):
-        Gtk.TextView.__init__(self)
-        self.log_buff = self.get_buffer()
-        self.log_buff.set_modified(False)
-        self.show()
-        
-    def insert_message(self, message):
-        assert isinstance(message, str)
-        self.log_buff.insert(self.log_buff.get_end_iter(), message)
-
-
-class DriverWindow(Gtk.Window):
-    __gsignals__ = {
-        'log' : (
-            GObject.SIGNAL_RUN_LAST, None, (str, str)
-        )
-    }
-
-    def __init__(self):
-        Gtk.Window.__init__(self)
-        self.logger = Logger()
-        self.log = FirmapiuLogView()
-
-        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.box.show()
-        self.add(self.box)
-
-        for drv in driver.keys():
-            butt = Gtk.Button(label=drv)
-            butt.connect("clicked", self.install_driver)
-            self.box.pack_start(butt, True, True, 0)
-            butt.show()
-            
-        self.box.pack_start(self.log, True, True, 0)
-
-    def do_log(self, msg_type, msg_str):
-        self.log.insert_message('[%s] %s\n' % (msg_type, msg_str))
+class DriverWindows(FirmapiuWindow):
     
-    def emit_on_main(self, *args):
-        GObject.idle_add(GObject.GObject.emit,self,*args)
-    
-    def install_driver(self, widget):
-        install_thread = InstallThread(self, self.logger)
-        install_thread.set_function(install_athena, self.logger)
-        install_thread.run()
+    def __init__(self):
+        FirmapiuWindow.__init__(self)
+                
+        fbutton_athena = FirmapiuButton('Athena', None, self.athena)
+        fbutton_cardos = FirmapiuButton('Cardos', None, self.cardos)
+        fbutton_incard = FirmapiuButton('Incard', None, self.incard)
+        fbutton_obertur = FirmapiuButton('Oberthur', None, self.oberthur)
+                
+        self.fgrid.add_fbutton(fbutton_athena)
+        self.fgrid.add_fbutton(fbutton_cardos)
+        self.fgrid.add_fbutton(fbutton_incard)
+        self.fgrid.add_fbutton(fbutton_obertur)
+
+    def athena(self, widget):
+        self.executor.set_function(install_athena, self.logger)
+        self.executor.execute_function()
+
+    def cardos(self, widget):
+        self.executor.set_function(install_cardos, self.logger)
+        self.executor.execute_function()
+
+    def incard(self, widget):
+        self.executor.set_function(install_incard, self.logger)
+        self.executor.execute_function()
+
+    def oberthur(self, widget):
+        self.executor.set_function(install_oberthur, self.logger)
+        self.executor.execute_function()
 
 
 if __name__ == '__main__':
@@ -93,7 +45,7 @@ if __name__ == '__main__':
         print 'use this program has root'
         sys.exit(1)
          
-    win = DriverWindow()
-    win.connect("delete-event", Gtk.main_quit)
+    GObject.threads_init()
+    win = DriverWindows()
     win.show_all()
     Gtk.main()

@@ -22,7 +22,7 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.main = main
         self.exec_function = None
         self.exec_args = None
-        self.cancel = False
+        self._cancel = False
         self.logger = logger
         self.config = config
         self.logger.function = self.logger_callback
@@ -43,8 +43,8 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.exec_function = function
         self.exec_args = args
         
-    def cancel(self):
-        self.cancel = True
+    def _cancel(self):
+        self._cancel = True
         
     def config_callback(self, name):
         '''
@@ -76,14 +76,14 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.exec_cond.release()
 
     def run(self):
-        while not self.cancel:
+        while not self._cancel:
             self.exec_cond.acquire()
             print 'waiting for function to execute', current_thread().getName()
             self.exec_cond.wait()
             print 'reciving function to execute', current_thread().getName()
             self.exec_function(*self.exec_args)
             self.exec_cond.release()
-        print 'cancel', current_thread().getName()
+        print '_cancel', current_thread().getName()
 
 class TestWindow(Gtk.Window):
     

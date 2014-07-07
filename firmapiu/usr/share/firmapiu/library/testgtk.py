@@ -1,8 +1,14 @@
+#!/usr/bin/python
+import os
 from gi.repository import GObject, Gtk
 from threading import Thread, current_thread, Condition
 from loglib import Logger
 from conflib import ConfigFileReader
 from fpiumanager import FirmapiuManager
+from fpiuwidget import FirmapiuButton
+from fpiuwidget import FirmapiuLogView
+from fpiuwidget import FirmapiuChooseDialog
+from fpiuwidget import FirmapiuEntryDialog
 
 class _ExecutorThread(Thread, GObject.GObject):
     __gsignals__ = {
@@ -23,7 +29,7 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.main = main
         self.exec_function = None
         self.exec_args = None
-        self.cancel = False
+        self._cancel = False
         self.logger = logger
         self.config = config
         self.logger.function = self.logger_callback
@@ -44,8 +50,8 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.exec_function = function
         self.exec_args = args
         
-    def cancel(self):
-        self.cancel = True
+    def _cancel(self):
+        self._cancel = True
         
     def config_callback(self, name):
         '''
@@ -77,83 +83,15 @@ class _ExecutorThread(Thread, GObject.GObject):
         self.exec_cond.release()
 
     def run(self):
-        while not self.cancel:
+        while not self._cancel:
             self.exec_cond.acquire()
             print 'waiting for function to execute', current_thread().getName()
             self.exec_cond.wait()
             print 'reciving function to execute', current_thread().getName()
             self.exec_function(*self.exec_args)
             self.exec_cond.release()
-        print 'cancel', current_thread().getName()
+        print '_cancel', current_thread().getName()
 
-
-class FirmapiuChooseDialog(Gtk.FileChooserDialog):
-    def __init__(self):
-        Gtk.FileChooserDialog.__init__(self,
-            "Scegli il file da firmare",
-            None,
-            Gtk.FileChooserAction.OPEN,
-            (
-                Gtk.STOCK_CANCEL,
-                Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_OPEN,
-                Gtk.ResponseType.OK
-            )
-        )
-
-    def set_extension(self, ext_name):
-        assert isinstance(ext_name, str)
-        # aggiungo il filtro per l'estensione
-        filter_ext = Gtk.FileFilter()
-        filter_ext.set_name("file with extension .%s" % ext_name)
-        filter_ext.add_pattern("*.%s" % ext_name)
-        self.add_filter(filter_ext)
-
-
-class FirmapiuEntryDialog(Gtk.MessageDialog):
-    def __init__(self, insert_title, insert_msg):
-        Gtk.Dialog.__init__(self, insert_title, None, 0,
-            (
-             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-             Gtk.STOCK_OK, Gtk.ResponseType.OK
-            )
-        )
-
-        self.insert_msg = insert_msg
-
-        self.label = Gtk.Label(label=insert_title)
-        self.label.show()
-        self.vbox.pack_start(self.label, True, True, 0)
-
-        self.entry = Gtk.Entry()
-        self.entry.set_text(self.insert_msg)
-        self.entry.show()
-        self.vbox.pack_start(self.entry, True, True, 0)
-
-    def get_response(self):
-        if self.entry.get_text() == self.insert_msg:
-            return None
-        return self.entry.get_text()
-
-
-class FirmapiuLogView(Gtk.TextView):
-    def __init__(self):
-        Gtk.TextView.__init__(self)
-        self.log_buff = self.get_buffer()
-        self.log_buff.set_modified(False)
-        self.show()
-        
-    def insert_message(self, message):
-        assert isinstance(message, str)
-        print 'log_buff.insert', current_thread().getName()
-        self.log_buff.insert(self.log_buff.get_end_iter(), message)
-
-
-class FirmapiuButton(Gtk.Button):
-    def __init__(self, label, image_path, clicked_function):
-        Gtk.Button.__init__(self, label=label)
-        self.connect('clicked', clicked_function)
-        
 
 class TestWindow(Gtk.Window):
     
@@ -182,16 +120,23 @@ class TestWindow(Gtk.Window):
         
         fbutton_firma = FirmapiuButton('firma', None, self.firma)
         fbutton_verifica = FirmapiuButton('verifica', None, self.verifica)
+        fbutton_timestamp = FirmapiuButton('timestamp', None, self.timestamp)
+        fbutton_carica_certificati = FirmapiuButton('carica certificati', None, self.carica_certificati)
+        fbutton_installa_driver = FirmapiuButton('installa driver', None, self.installa_driver)
         
         self.flog = FirmapiuLogView()
         
         self.grid.attach(fbutton_firma, 0, 0, 1, 1)
         self.grid.attach(fbutton_verifica, 0, 1, 1, 1)
-        self.grid.attach(self.flog, 0, 2, 1, 1)
+        self.grid.attach(fbutton_timestamp, 0, 2, 1, 1)
+        self.grid.attach(fbutton_carica_certificati, 0, 3, 1, 1)
+        self.grid.attach(fbutton_installa_driver, 0, 4, 1, 1)
+        self.grid.attach(self.flog, 0, 5, 1, 1)
 
-    def choose_filename(self, extension):
+    def choose_filename(self, extension=None):
         dialog = FirmapiuChooseDialog()
-        dialog.set_extension(extension)
+        if extension is not None:
+            dialog.set_extension(extension)
         response = dialog.run()
         choise = None
         if response == Gtk.ResponseType.OK:
@@ -213,14 +158,31 @@ class TestWindow(Gtk.Window):
         return result
     
     def firma(self, widget):
-        filename = self.choose_filename('*')
+        filename = self.choose_filename()
         self.executor.set_function(self.fmanager.sign, filename, self.config, self.logger)
         self.executor.execute_function()
         
     def verifica(self, widget):
-        filename = self.choose_filename('*.p7m')
+        filename = self.choose_filename('p7m')
         self.executor.set_function(self.fmanager.verify, filename, self.config, self.logger)
         self.executor.execute_function()
+        
+    def timestamp(self, widget):
+        filename = self.choose_filename()
+        self.executor.set_function(self.fmanager.timestamp, filename, self.config, self.logger)
+        self.executor.execute_function()
+        
+    def verifica_timestamp(self, widget):
+        filename = self.choose_filename('tsr')
+        self.executor.set_function(self.fmanager.timestamp_verify, filename, self.config, self.logger)
+        self.executor.execute_function()
+        
+    def carica_certificati(self, widget):
+        self.executor.set_function(self.fmanager.load_cert_dir, self.config, self.logger)
+        self.executor.execute_function()
+        
+    def installa_driver(self, widget):
+        os.popen('gksudo python /usr/share/firmapiu/library/drivergui.py')
         
     def do_thread_progress(self, msg_type, msg_str):
         '''
