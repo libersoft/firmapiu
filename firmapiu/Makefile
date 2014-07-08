@@ -38,8 +38,8 @@ install:
 	install -m644 $(RELATIVE_SHARE_DIR)/icon/*.png $(ABSOLUTE_SHARE_DIR)/icon
 	# install library and config file
 	install $(RELATIVE_SHARE_DIR)/module/*.sh $(ABSOLUTE_SHARE_DIR)/module
-	install $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
-	install $(RELATIVE_SHARE_DIR)/library/rfc3161/*.py $(ABSOLUTE_SHARE_DIR)/library/rfc3161
+	install -m644 $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
+	install -m644 $(RELATIVE_SHARE_DIR)/library/rfc3161/*.py $(ABSOLUTE_SHARE_DIR)/library/rfc3161
 	# sposto i file di configurazione
 	install -m644 $(RELATIVE_ETC_DIR)/firmapiurc $(ABSOLUTE_ETC_DIR)
 	install -m644 $(RELATIVE_ETC_DIR)/firmapiu.conf $(ABSOLUTE_ETC_DIR)

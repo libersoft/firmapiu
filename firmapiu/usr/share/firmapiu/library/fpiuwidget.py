@@ -87,7 +87,13 @@ class _ExecutorThread(Thread, GObject.GObject):
             print 'waiting for function to execute', current_thread().getName()
             self.exec_cond.wait()
             print 'reciving function to execute', current_thread().getName()
-            print 'retval run:"', self.exec_function(*self.exec_args), '"'
+            try:
+                print 'retval run:"', self.exec_function(*self.exec_args), '"'
+                self.main.emit_on_main('thread_completed', 'OK')
+            except Exception, e:
+                print 'exception on thread occur', e
+                self.main.emit_on_main('thread_completed_error', str(e))
+                
             self.exec_cond.release()
         
         print '_cancel', current_thread().getName()
@@ -101,7 +107,15 @@ class FirmapiuWindow(Gtk.Window):
         'thread_request' : (
             GObject.SIGNAL_RUN_LAST, None, (str,)
                             
-        )
+        ),
+        'thread_completed' : (
+            GObject.SIGNAL_RUN_LAST, None, (str,)
+                            
+        ),
+        'thread_completed_error' : (
+            GObject.SIGNAL_RUN_LAST, None, (str,)
+                            
+        ),
     }
     
     def __init__(self):
@@ -115,7 +129,7 @@ class FirmapiuWindow(Gtk.Window):
         
         self.vbox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
         self.fgrid = FirmapiuGrid(3)  # griglia nella quale verranno disposte le icone
-        self.flog = FirmapiuLogView()  # finestra di log del programma
+        self.flog = FirmapiuLogWindow()  # finestra di log del programma
         self.vbox.pack_start(self.fgrid, True, True, 0)
         self.vbox.pack_start(self.flog, True, True, 0)
         self.add(self.vbox)
@@ -123,12 +137,18 @@ class FirmapiuWindow(Gtk.Window):
     def __del__(self):
         print 'FirmapiuWindow __del__'
 
+    def do_thread_completed(self, msg):
+        self.flog.insert_message('OK %s' % msg)
+    
+    def do_thread_completed_error(self, err_msg):
+        self.flog.insert_message('ERRORE: %s' % err_msg)
+
     def do_thread_progress(self, msg_type, msg_str):
         '''
         Funzione chiamata quando il thread comunica col main
         delle informazioni di log
         '''
-        print msg_type, msg_str, current_thread().getName()
+        #print msg_type, msg_str, current_thread().getName()
         self.flog.insert_message('[%s] %s\n' % (msg_type, msg_str))
         
     def do_thread_request(self, name):
@@ -187,24 +207,35 @@ class FirmapiuGrid(Gtk.Grid):
             self.column += 1
 
 
-class FirmapiuLogView(Gtk.TextView):
+class FirmapiuLogWindow(Gtk.ScrolledWindow):
     def __init__(self):
-        Gtk.TextView.__init__(self)
-        self.log_buff = self.get_buffer()
+        Gtk.ScrolledWindow.__init__(self)
+        self.log_widget = Gtk.TextView()
+        self.add(self.log_widget)
+        self.log_buff = self.log_widget.get_buffer()
         self.log_buff.set_modified(False)
-        self.insert_message("-- Finestra di Log --")
+        self.insert_message("-- Finestra di Log --\n")
         self.show()
         
     def insert_message(self, message):
         assert isinstance(message, str)
-        print 'log_buff.insert', current_thread().getName()
         self.log_buff.insert(self.log_buff.get_end_iter(), message)
 
 
 class FirmapiuButton(Gtk.Button):
     def __init__(self, label, image_path, clicked_function):
-        Gtk.Button.__init__(self, label=label)
+        Gtk.Button.__init__(self,label=label)
+        if image_path is not None:
+            self.set_image(Gtk.Image.new_from_file(image_path))
+            self.set_image_position(Gtk.PositionType.TOP)
         self.connect('clicked', clicked_function)
+#         if image_path is not None:
+#             image = Gtk.Image()
+#             image.set_from_file(image_path)
+#             
+#         image = Gtk.Image(stock=Gtk.STOCK_OPEN)
+
+       
 
 
 

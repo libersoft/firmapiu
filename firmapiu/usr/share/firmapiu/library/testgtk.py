@@ -6,7 +6,7 @@ from loglib import Logger
 from conflib import ConfigFileReader
 from fpiumanager import FirmapiuManager
 from fpiuwidget import FirmapiuButton
-from fpiuwidget import FirmapiuLogView
+from fpiuwidget import FirmapiuLogWindow
 from fpiuwidget import FirmapiuChooseDialog
 from fpiuwidget import FirmapiuEntryDialog
 
@@ -124,7 +124,7 @@ class TestWindow(Gtk.Window):
         fbutton_carica_certificati = FirmapiuButton('carica certificati', None, self.carica_certificati)
         fbutton_installa_driver = FirmapiuButton('installa driver', None, self.installa_driver)
         
-        self.flog = FirmapiuLogView()
+        self.flog = FirmapiuLogWindow()
         
         self.grid.attach(fbutton_firma, 0, 0, 1, 1)
         self.grid.attach(fbutton_verifica, 0, 1, 1, 1)

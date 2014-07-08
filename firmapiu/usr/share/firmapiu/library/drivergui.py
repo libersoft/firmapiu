@@ -8,20 +8,31 @@ from driverlib import install_incard
 from driverlib import install_oberthur
 from driverlib import is_root
 
-class DriverWindows(FirmapiuWindow):
+
+icon_dir = "/usr/share/firmapiu/icon/"
+
+
+class DriverWindow(FirmapiuWindow):
     
     def __init__(self):
         FirmapiuWindow.__init__(self)
                 
-        fbutton_athena = FirmapiuButton('Athena', None, self.athena)
-        fbutton_cardos = FirmapiuButton('Cardos', None, self.cardos)
-        fbutton_incard = FirmapiuButton('Incard', None, self.incard)
-        fbutton_obertur = FirmapiuButton('Oberthur', None, self.oberthur)
+        fbutton_athena = FirmapiuButton('Athena', icon_dir + 'driver.png', self.athena)
+        fbutton_cardos = FirmapiuButton('Cardos', icon_dir + 'driver.png', self.cardos)
+        fbutton_incard = FirmapiuButton('Incard', icon_dir + 'driver.png', self.incard)
+        fbutton_obertur = FirmapiuButton('Oberthur', icon_dir + 'driver.png', self.oberthur)
+        fbutton_esci = FirmapiuButton('esci', icon_dir + 'esci.png', self.esci)
+
                 
         self.fgrid.add_fbutton(fbutton_athena)
         self.fgrid.add_fbutton(fbutton_cardos)
         self.fgrid.add_fbutton(fbutton_incard)
         self.fgrid.add_fbutton(fbutton_obertur)
+        self.fgrid.add_fbutton(fbutton_esci)
+
+    def esci(self, widget):
+        print 'esci pressed'
+        Gtk.main_quit()
 
     def athena(self, widget):
         self.executor.set_function(install_athena, self.logger)
@@ -46,6 +57,6 @@ if __name__ == '__main__':
         sys.exit(1)
          
     GObject.threads_init()
-    win = DriverWindows()
+    win = DriverWindow()
     win.show_all()
     Gtk.main()

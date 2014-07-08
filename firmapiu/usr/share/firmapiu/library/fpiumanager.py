@@ -90,5 +90,5 @@ class FirmapiuManager(object):
     def load_cert_dir(self, config, logger):
         self._lazy_init_sign(config, logger)
         
-        add_cert_dir_to_certmanager(self._certmanager, localconfig.CERTIFICATE_DIR)
+        add_cert_dir_to_certmanager(self._certmanager, localconfig.CERTIFICATE_DIR, logger)
         logger.status('cert %s dir loaded' % localconfig.CERTIFICATE_DIR)

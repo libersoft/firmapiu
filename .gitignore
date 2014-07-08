@@ -1,6 +1,7 @@
 *.pyc
 *.pyo
 firmapiu-*.tar.gz
+icon.tar.gz
 .idea
 .project
 .pydevproject

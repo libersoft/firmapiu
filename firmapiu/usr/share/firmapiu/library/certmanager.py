@@ -12,6 +12,7 @@ from certlib import extract_crl_url
 from certlib import obtain_crl
 from certlib import extract_rev_list
 from certlib import load_certificate
+from loglib import Logger
 
 
 class CACertificateNotFoundException(Exception):
@@ -37,20 +38,20 @@ class CertificateManager(object):
         print 'execute commit'
         self.store.commit()
     
-    def _add_crl(self,crl_url):
+    def _add_crl(self,crl_url, logger):
         assert isinstance(crl_url, str)
         cacrl = self.store.find(CRL, CRL.crl_url == unicode(crl_url)).one()
         if cacrl is None:
             cacrl = CRL(crl_url)
             crl = obtain_crl(crl_url)  # ottengo la crl
             if crl is None:  # non ho trovato nessuna crl
-                print 'non sono riuscito ad ottenere la lista revocati'
-                return False
+                logger.error('non sono riuscito ad ottenere la lista revocati')
+                return None
             
             rev_list = extract_rev_list(crl)  # TODO da controllare perche' restituisce None
             if rev_list is None:
-                print 'non sono riuscito ad ottenere l\'oggetto crl'
-                return False
+                logger.error('non sono riuscito ad ottenere l\'oggetto crl')
+                return None
             
             for rev in rev_list:  # aggiungo i seriali revocati
                 revoke = Revoke(rev.get_serial())
@@ -60,7 +61,7 @@ class CertificateManager(object):
 
         return cacrl
     
-    def add_ca_certificate(self, cert):
+    def add_ca_certificate(self, cert, logger):
         assert isinstance(cert, M2Crypto.X509.X509)
         if cert.check_ca() == 0:
             return False
@@ -75,16 +76,18 @@ class CertificateManager(object):
             crl_url = extract_crl_url(cert)
             
             if crl_url is not None:
-                cacrl = self._add_crl(crl_url)
-                cacert.crl = cacrl
+                cacrl = self._add_crl(crl_url, logger)
+                if cacrl is not None:
+                    cacert.crl = cacrl
             self.store.add(cacert)
             try:
                 self.store.flush()
+                return True
             except sqlite3.IntegrityError, e:
-                print 'errore sqlite', e
+                logger.error('errore sqlite: %s' % str(e))
                 return False
         else:
-            print "certificate of:", cert.get_subject().as_text(), "already present"
+            logger.error("certificate of: %s already present" % cert.get_subject().as_text())
             return False
     
     def _get_ca_certificate(self, cert):
@@ -184,17 +187,26 @@ CREATE TABLE revoke (
 );
 """
 
-def add_cert_dir_to_certmanager(certmanager, dirpath):
+def add_cert_dir_to_certmanager(certmanager, dirpath, logger):
     assert isinstance(certmanager, CertificateManager)
     assert isinstance(dirpath, str)
+    assert isinstance(logger, Logger)
     
     for root, _dirs, files in os.walk(dirpath):
         for name in files:
             path = os.path.join(root, name)
-            print path
+            logger.status('examine %s' % path)
             with open(path) as f:
                 data = f.read()
             cert_list = load_certificate(data)
-            for cert in cert_list:
-                certmanager.add_ca_certificate(cert) 
+            if cert_list is not None:
+                for cert in cert_list:
+                    if not certmanager.add_ca_certificate(cert, logger):
+                        logger.error('failed to add certificate')
+                        #logger.error('failed to add certificate\n%s' % cert.as_pem())
+                    else:
+                        logger.status('cert added')
+                    
+            else:
+                logger.error('found no certs in %s' % path)
 
