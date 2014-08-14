@@ -13,7 +13,6 @@ class TestWindow(FirmapiuWindow):
     
     def __init__(self):
         FirmapiuWindow.__init__(self)
-        self.connect('destroy', Gtk.main_quit)
         self.fmanager = FirmapiuManager()
                 
         fbutton_firma = FirmapiuButton('firma', icon_dir + 'firma.png', self.firma)
@@ -21,19 +20,28 @@ class TestWindow(FirmapiuWindow):
         fbutton_timestamp = FirmapiuButton('timestamp', icon_dir + 'timestamp.png', self.timestamp)
         fbutton_carica_certificati = FirmapiuButton('carica certificati', icon_dir + 'certificati.png', self.carica_certificati)
         fbutton_installa_driver = FirmapiuButton('installa driver', icon_dir + 'driver.png', self.installa_driver)
-        fbutton_dati_timestamp = FirmapiuButton('dati timestamp', icon_dir + 'impostazioni.png', self.installa_driver)
+        #fbutton_dati_timestamp = FirmapiuButton('dati timestamp', icon_dir + 'impostazioni.png', self.installa_driver)
         fbutton_esci = FirmapiuButton('esci', icon_dir + 'esci.png', self.esci)
-                
+        
         self.fgrid.add_fbutton(fbutton_firma)
         self.fgrid.add_fbutton(fbutton_verifica)
         self.fgrid.add_fbutton(fbutton_timestamp)
         self.fgrid.add_fbutton(fbutton_carica_certificati)
         self.fgrid.add_fbutton(fbutton_installa_driver)
-        self.fgrid.add_fbutton(fbutton_dati_timestamp)
+        #self.fgrid.add_fbutton(fbutton_dati_timestamp)
         self.fgrid.add_fbutton(fbutton_esci)
+
+
+    def __del__(self):
+        print 'TestWindow __del__'
+
+    def cleanup(self):
+        FirmapiuWindow.cleanup(self)
+        self.fmanager.cleanup()
 
     def esci(self, widget):
         print 'esci pressed'
+        self.cleanup()
         Gtk.main_quit()
 
     def firma(self, widget):

@@ -2,35 +2,32 @@ from signlib import Signer
 from timestamplib import Timestamper
 from scardlib import SmartcardHolder
 from certmanager import CertificateManager
-from certmanager import add_cert_dir_to_certmanager
 import localconfig
 import filelib
 
 
 class FirmapiuManager(object):
-#    __single = None
-    
-    # metodo per l'implementazione di un singleton
-#     def __new__(cls, *args, **kwargs):
-#         if cls != type(cls.__single):
-#             cls.__single = object.__new__(cls, *args, **kwargs)
-#         return cls.__single
-            
     def __init__(self):
-        # TODO da controllare se config_filename non e' un file
-#        if not isfunction(config_handler_function) or not isfunction(logger_write_function):
-#            raise VariableNotFunctionException()
         self._scard_holder = None
         self._signer = None
         self._certmanager = None
         self._timestamper = None
     
     def __del__(self):
-        print 'cleanup'
+        print 'FirmapiuManager __del__'
+    
+    def cleanup(self):
+        if self._certmanager is not None:
+            self._certmanager.cleanup()
+        print 'FirmapiuManager cleanup'
     
     def _lazy_init_timestamp(self, config, logger):
         if self._timestamper is None:
             self._timestamper = Timestamper(config, logger)
+    
+    def _lazy_init_certificate(self, config, logger):
+        if self._certmanager is None:
+            self._certmanager = CertificateManager(localconfig.DATABASE_FILE)
     
     def _lazy_init_sign(self, config, logger):
         if self._scard_holder is None:
@@ -41,7 +38,6 @@ class FirmapiuManager(object):
             
         if self._certmanager is None:
             self._certmanager = CertificateManager(localconfig.DATABASE_FILE)
-
         
     def sign(self, filename, config, logger):
         self._lazy_init_sign(config, logger)
@@ -63,7 +59,7 @@ class FirmapiuManager(object):
         self._lazy_init_sign(config, logger)
         
         data = filelib.read_file(filename)
-        if self._signer.verify(self._certmanager, data):
+        if self._signer.verify(self._certmanager, data, self_signed=True):
             logger.status('file verificato %s correttamente' % filename)
         else:
             logger.status('il file %s non ha superato la verifica' % filename)
@@ -86,9 +82,15 @@ class FirmapiuManager(object):
     
     def timestamp_verify(self, filename, config, logger):
         logger.status('timestamp verificato')
+  
+    def show_certs(self, config, logger):
+        pass
+        
+    def load_cert(self, filename, config, logger):
+        self._lazy_init_certificate(config, logger)
+        self._certmanager.add_cert_to_certmanager(filename, logger)
         
     def load_cert_dir(self, config, logger):
         self._lazy_init_sign(config, logger)
-        
-        add_cert_dir_to_certmanager(self._certmanager, localconfig.CERTIFICATE_DIR, logger)
+        self._certmanager.add_cert_dir_to_certmanager(localconfig.CERTIFICATE_DIR, logger)
         logger.status('cert %s dir loaded' % localconfig.CERTIFICATE_DIR)

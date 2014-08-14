@@ -26,35 +26,44 @@ build:
 
 install:
 	# creo le directory in /etc /usr/share e /bin
-	install -d $(ABSOLUTE_BIN_DIR) $(ABSOLUTE_ETC_DIR) $(ABSOLUTE_SHARE_DIR) $(ABSOLUTE_MENU_LAUNCHER)
-	# creo la directory per i moduli, le librerie e le icone
-	install -d $(ABSOLUTE_ETC_DIR)/certs
-	install -d $(ABSOLUTE_SHARE_DIR)/module
-	install -d $(ABSOLUTE_SHARE_DIR)/library
-	install -d $(ABSOLUTE_SHARE_DIR)/library/rfc3161
-	install -d $(ABSOLUTE_SHARE_DIR)/icon
-	# install icons
-	install -d $(ABSOLUTE_SHARE_DIR)/icon
-	install -m644 $(RELATIVE_SHARE_DIR)/icon/*.png $(ABSOLUTE_SHARE_DIR)/icon
-	# install library and config file
-	install $(RELATIVE_SHARE_DIR)/module/*.sh $(ABSOLUTE_SHARE_DIR)/module
-	install -m644 $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
-	install -m644 $(RELATIVE_SHARE_DIR)/library/rfc3161/*.py $(ABSOLUTE_SHARE_DIR)/library/rfc3161
-	# sposto i file di configurazione
+	install -d $(ABSOLUTE_BIN_DIR)
+	install -d $(ABSOLUTE_SHARE_DIR)
+	install -d $(ABSOLUTE_ETC_DIR)
+	# installo i file di configurazione
 	install -m644 $(RELATIVE_ETC_DIR)/firmapiurc $(ABSOLUTE_ETC_DIR)
 	install -m644 $(RELATIVE_ETC_DIR)/firmapiu.conf $(ABSOLUTE_ETC_DIR)
 	install -m644 $(RELATIVE_ETC_DIR)/libraries.xml $(ABSOLUTE_ETC_DIR)
-	# install binary file
-	@echo "creo launcher del programma"
+	# installo le icone
+	install -d $(ABSOLUTE_SHARE_DIR)/icon
+	install -m644 $(RELATIVE_SHARE_DIR)/icon/*.png $(ABSOLUTE_SHARE_DIR)/icon
+	# installo le librerie rfc3161
+	install -d $(ABSOLUTE_SHARE_DIR)/library/rfc3161
+	install -m644 $(RELATIVE_SHARE_DIR)/library/rfc3161/*.py $(ABSOLUTE_SHARE_DIR)/library/rfc3161
+	# installo le librerie
+	install -d $(ABSOLUTE_SHARE_DIR)/library
+	install -m644 $(RELATIVE_SHARE_DIR)/library/*.py $(ABSOLUTE_SHARE_DIR)/library
+	# installo il launcher per il menu
+	install -d $(ABSOLUTE_MENU_LAUNCHER)
 	install -m644 $(RELATIVE_MENU_LAUNCHER)/firmapiu-gtk.desktop $(ABSOLUTE_MENU_LAUNCHER)
+	# installo i moduli per i file in bash	
+	install -d $(ABSOLUTE_SHARE_DIR)/module
+	install $(RELATIVE_SHARE_DIR)/module/*.sh $(ABSOLUTE_SHARE_DIR)/module
+	# install binary file
 	install -m644 $(RELATIVE_BIN_DIR)/firmapiugui $(ABSOLUTE_BIN_DIR)
+	#update-desktop-database $(ABSOLUTE_MENU_LAUNCHER)
+	# installo i certificati base
+	install -d $(ABSOLUTE_ETC_DIR)/certs
+	install -d $(ABSOLUTE_ETC_DIR)/certs/Namirial
+	install -m644 $(RELATIVE_ETC_DIR)/certs/Namirial/*.pem $(ABSOLUTE_ETC_DIR)/certs/Namirial/
+	install -d $(ABSOLUTE_ETC_DIR)/certs/Infocert
+	install -m644 $(RELATIVE_ETC_DIR)/certs/Infocert/*.pem $(ABSOLUTE_ETC_DIR)/certs/Infocert/
+	install -d $(ABSOLUTE_ETC_DIR)/certs/ArubaPEC
+	install -m644 $(RELATIVE_ETC_DIR)/certs/ArubaPEC/*.pem $(ABSOLUTE_ETC_DIR)/certs/ArubaPEC/
 	
-
 uninstall:
-	# rimuovo la cartella /etc/firmapiu
 	rm -r $(ABSOLUTE_ETC_DIR)
-	# rimuovo la cartella /usr/share/firmapiu
 	rm -r $(ABSOLUTE_SHARE_DIR)
-	rm -r $(ABSOLUTE_MENU_LAUNCHER)/firmapiu-gtk.desktop
+	rm $(ABSOLUTE_MENU_LAUNCHER)/firmapiu-gtk.desktop
+	rm $(ABSOLUTE_BIN_DIR)/firmapiugui
 
 .PHONY: build install uninstall

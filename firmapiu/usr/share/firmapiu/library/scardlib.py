@@ -101,7 +101,8 @@ class SmartcardHolder(Holder):
 
         self.engine_driver_path = engine_drv_path
 
-        scard_drv_path = self.config.get_smartcard_driver_path()  # ottengo il path della smartcard dalle config
+        #scard_drv_path = self.config.get_smartcard_driver_path()  # ottengo il path della smartcard dalle config TODO
+        scard_drv_path = None
         if scard_drv_path is None:  # se non sono riuscito ad ottenere il driver della smartcard
             scard_atr = get_smartcard_atr(self._logger)  # ottengo l'atr della smartcard
             if scard_atr is None:  # se non sono riuscito ad ottenere l'atr

@@ -355,9 +355,9 @@ get_pem_certificate(){
 	ID_INT="0"
 	FOUND=""
 
-	#ID_CERT="445330"
-	#pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
-	/usr/share/firmapiu/library/SmartcardFetcher.py # uso il mio programma python
+	ID_CERT="445330"
+	pkcs11-tool --module $LIBRARY_PATH --read-object --type cert --id "$ID_CERT" > "certificate.der"
+	#/usr/share/firmapiu/library/SmartcardFetcher.py # uso il mio programma python
 
 	PEM_CERT_FILE=$(create_temp_file) || return 1
 
@@ -455,7 +455,7 @@ get_library_path(){
 		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:11:01:43:4e:53:11:31:80:8e"|\
 		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:02:00:01:00:01:43:4e:53:00:31:80:00"|\
 		"3b:ff:18:00:ff:81:31:fe:55:00:6b:02:09:03:03:01:01:01:43:4e:53:10:31:80:9d")
-			LIBRARY_PATH="/usr/local/lib/libbit4ipki.so"
+			LIBRARY_PATH="/usr/lib/bit4id/libbit4xpki.so"
 			;;
 		*)
 			;;

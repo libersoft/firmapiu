@@ -11,6 +11,7 @@ from certmanager import CACertificateNotFoundException
 
 from M2Crypto.X509 import X509_Store
 
+
 class Signer(object):
     
     def __init__(self, config, logger):
@@ -51,7 +52,7 @@ class Signer(object):
         signer.x509 = cert
 
         # firmo il buffer
-        try :
+        try:
             pkcs7 = signer.sign(bio)
         except:
             return None

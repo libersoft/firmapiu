@@ -16,6 +16,12 @@ class ConfigReader(object):
         self._function = None
         self._logger = logger
     
+    def __del__(self):
+        print 'ConfigReader __del__'
+    
+    def cleanup(self):
+        print 'ConfigReader cleanup'
+    
     @property
     def function(self):
         return self._function

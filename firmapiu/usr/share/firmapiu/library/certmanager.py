@@ -13,6 +13,7 @@ from certlib import obtain_crl
 from certlib import extract_rev_list
 from certlib import load_certificate
 from loglib import Logger
+from filelib import read_file
 
 
 class CACertificateNotFoundException(Exception):
@@ -35,7 +36,11 @@ class CertificateManager(object):
             print 'errore'
     
     def __del__(self):
-        print 'execute commit'
+        print 'CertificateManager.__del__()'
+        self.store.commit()
+        
+    def cleanup(self):
+        print 'CertificateManager.cleanup()'
         self.store.commit()
     
     def _add_crl(self,crl_url, logger):
@@ -113,6 +118,7 @@ class CertificateManager(object):
         
     def is_revoked(self, cert):
         assert isinstance(cert, M2Crypto.X509.X509)
+        return False
         cacert = self._get_ca_certificate(cert)
         if cacert is None:  # se non trovo nessuna ca per quel certificato
             raise CACertificateNotFoundException()
@@ -120,7 +126,42 @@ class CertificateManager(object):
             if rev.rev_serial == cert.get_serial_number():
                 return True
         return False
+    
+    def add_cert_to_certmanager(self, certfile, logger):
+        assert isinstance(certfile, str)
+        assert isinstance(logger, Logger)
         
+        certdata = read_file(certfile)
+        cert_list = load_certificate(certdata)
+        if cert_list is not None:
+            for cert in cert_list:
+                if not self.add_ca_certificate(cert, logger):
+                    logger.error('failed to add certificate')
+                else:
+                    logger.status('cert added')
+    
+    def add_cert_dir_to_certmanager(self, dirpath, logger):
+        assert isinstance(dirpath, str)
+        assert isinstance(logger, Logger)
+        
+        for root, _dirs, files in os.walk(dirpath):
+            for name in files:
+                path = os.path.join(root, name)
+                logger.status('examine %s' % path)
+                with open(path) as f:
+                    data = f.read()
+                cert_list = load_certificate(data)
+                if cert_list is not None:
+                    for cert in cert_list:
+                        if not self.add_ca_certificate(cert, logger):
+                            logger.error('failed to add certificate')
+                            #logger.error('failed to add certificate\n%s' % cert.as_pem())
+                        else:
+                            logger.status('cert added')
+                else:
+                    logger.error('found no certs in %s' % path)
+
+
 class CRL(object):
     __storm_table__ = "crl"
     crl_url = Unicode(primary=True)
@@ -143,7 +184,6 @@ class Revoke(object):
         self.rev_serial = unicode(serial)
         self.rev_date = None
 
-    
 
 class CACertificate(object):
     __storm_table__ = "ca_certificate"
@@ -186,27 +226,4 @@ CREATE TABLE revoke (
     FOREIGN KEY(crl_url) REFERENCES crl(url)
 );
 """
-
-def add_cert_dir_to_certmanager(certmanager, dirpath, logger):
-    assert isinstance(certmanager, CertificateManager)
-    assert isinstance(dirpath, str)
-    assert isinstance(logger, Logger)
-    
-    for root, _dirs, files in os.walk(dirpath):
-        for name in files:
-            path = os.path.join(root, name)
-            logger.status('examine %s' % path)
-            with open(path) as f:
-                data = f.read()
-            cert_list = load_certificate(data)
-            if cert_list is not None:
-                for cert in cert_list:
-                    if not certmanager.add_ca_certificate(cert, logger):
-                        logger.error('failed to add certificate')
-                        #logger.error('failed to add certificate\n%s' % cert.as_pem())
-                    else:
-                        logger.status('cert added')
-                    
-            else:
-                logger.error('found no certs in %s' % path)
 

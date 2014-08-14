@@ -99,6 +99,38 @@ class _ExecutorThread(Thread, GObject.GObject):
         print '_cancel', current_thread().getName()
 
 
+class FirmapiuConfigWindow(Gtk.Window):
+    def __init__(self):
+        Gtk.Window.__init__(self)
+    
+class FirmapiuProgress(Gtk.ProgressBar):
+    def __init__(self, text):
+        Gtk.ProgressBar.__init__(self)
+        self.set_show_text(True)
+        self.set_text(text)
+        self.show()
+        self._active = False
+        
+    def _on_timeout(self, data):
+        print 'on timeout', current_thread().getName()
+        if not self._active:
+            return False
+        else:
+            self.pulse()
+            return True
+        
+    def active(self):
+        self._active = True
+        print 'gobject timeout add', current_thread().getName()
+        GObject.timeout_add(100, self._on_timeout, None)
+        
+    def deactive(self):
+        self._active = False
+
+
+icon_dir = "/usr/share/firmapiu/icon/"
+
+
 class FirmapiuWindow(Gtk.Window):
     __gsignals__ = {
         'thread_progress' : (
@@ -120,7 +152,7 @@ class FirmapiuWindow(Gtk.Window):
     
     def __init__(self):
         Gtk.Window.__init__(self)
-        
+        self.connect('destroy', Gtk.main_quit)
         self.logger = Logger()
         self.config = ConfigFileReader('/etc/firmapiu/firmapiu.conf', self.logger)
 
@@ -136,6 +168,12 @@ class FirmapiuWindow(Gtk.Window):
 
     def __del__(self):
         print 'FirmapiuWindow __del__'
+
+    def cleanup(self):
+        print 'FirmapiuWindow.cleanp()'
+        self.config.cleanup()
+        self.logger.cleanup()
+
 
     def do_thread_completed(self, msg):
         self.flog.insert_message('OK %s' % msg)
@@ -286,3 +324,13 @@ class FirmapiuChooseDialog(Gtk.FileChooserDialog):
         filter_ext.set_name("file with extension .%s" % ext_name)
         filter_ext.add_pattern("*.%s" % ext_name)
         self.add_filter(filter_ext)
+
+
+if __name__ == '__main__':
+    GObject.threads_init()
+    win = Gtk.Window()
+    prog = FirmapiuProgress('pippo')
+    win.show_all()
+    prog.active() 
+    win.add(prog)
+    Gtk.main()    

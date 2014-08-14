@@ -9,6 +9,12 @@ class Logger(object):
     def __init__(self):
         self._write_function = None
         
+    def __del__(self):
+        print 'Logger __del__'
+        
+    def cleanup(self):
+        print 'Logger cleanup'
+        
     @property
     def function(self):
         return self._write_function
